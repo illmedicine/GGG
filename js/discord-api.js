@@ -171,12 +171,13 @@ class DiscordAPI {
             embed.image = { url: formatted.images[0] };
         }
 
-        // Add video thumbnail or link
+        // Add video - post direct URL for Discord to embed if possible
         if (formatted.video) {
             if (!embed.description) {
                 embed.description = '';
             }
-            embed.description += `\n\n🎬 Video attached`;
+            // Add video URL directly - Discord will try to embed it
+            embed.description += `\n\n🎬 ${formatted.video}`;
         }
 
         // Add tags as field (only if not hiding user info, tags can be identifying)
@@ -222,29 +223,27 @@ class DiscordAPI {
     /**
      * Send multiple posts with images gallery style
      */
-    async sendPostWithAllImages(webhookUrl, post, blogInfo = null) {
+    async sendPostWithAllImages(webhookUrl, post, blogInfo = null, hideUserInfo = true) {
         const formatted = tumblrAPI.formatPostForDisplay(post);
         
         if (formatted.images.length <= 1) {
             // Single image or no images, use regular embed
-            return await this.sendPost(webhookUrl, post, blogInfo);
+            return await this.sendPost(webhookUrl, post, blogInfo, null, hideUserInfo);
         }
 
         // For multiple images, send main embed then additional images
-        const mainMessage = this.createPostMessage(post, blogInfo);
+        const mainMessage = this.createPostMessage(post, blogInfo, null, hideUserInfo);
         await this.queueMessage(webhookUrl, mainMessage);
 
         // Send additional images (Discord allows up to 10 embeds per message)
         const additionalImages = formatted.images.slice(1, 10);
         if (additionalImages.length > 0) {
             const imageEmbeds = additionalImages.map(url => ({
-                url: formatted.url,
                 image: { url }
             }));
 
             const imageMessage = {
-                username: `Tumblr • ${post.blog_name}`,
-                avatar_url: `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`,
+                username: 'Media Bot',
                 embeds: imageEmbeds
             };
 
@@ -256,11 +255,47 @@ class DiscordAPI {
     }
 
     /**
+     * Send video post - posts video URL as content for Discord to auto-embed
+     */
+    async sendVideoPost(webhookUrl, post, blogInfo = null, hideUserInfo = true) {
+        const formatted = tumblrAPI.formatPostForDisplay(post);
+        
+        if (!formatted.video) {
+            // No video, use regular post
+            return await this.sendPost(webhookUrl, post, blogInfo, null, hideUserInfo);
+        }
+
+        // Create embed without the video URL in description
+        const embed = this.createEmbed(post, blogInfo, hideUserInfo);
+        // Remove the video URL from description since we'll post it separately
+        if (embed.description) {
+            embed.description = embed.description.replace(/\n\n🎬.*$/, '');
+        }
+
+        // Send embed first
+        const embedMessage = {
+            username: 'Media Bot',
+            embeds: [embed]
+        };
+        await this.queueMessage(webhookUrl, embedMessage);
+
+        // Then send video URL as plain content - Discord will auto-embed it
+        await this.delay(CONFIG.DISCORD_RATE_LIMIT_MS);
+        const videoMessage = {
+            username: 'Media Bot',
+            content: formatted.video
+        };
+        await this.queueMessage(webhookUrl, videoMessage);
+
+        return true;
+    }
+
+    /**
      * Send a simple notification message
      */
     async sendNotification(webhookUrl, title, description, color = 0x529ecc) {
         const message = {
-            username: 'Tumblr2Discord',
+            username: 'Media Bot',
             embeds: [{
                 title,
                 description,

@@ -473,7 +473,15 @@ class App {
             let successCount = 0;
             for (const post of newPosts.reverse()) {
                 try {
-                    await discordAPI.sendPost(connection.webhookUrl, post);
+                    const formatted = tumblrAPI.formatPostForDisplay(post);
+                    // Use appropriate method based on content type
+                    if (formatted.video) {
+                        await discordAPI.sendVideoPost(connection.webhookUrl, post);
+                    } else if (formatted.images.length > 1) {
+                        await discordAPI.sendPostWithAllImages(connection.webhookUrl, post);
+                    } else {
+                        await discordAPI.sendPost(connection.webhookUrl, post);
+                    }
                     Storage.markPostsAsSynced(connectionId, [post.id]);
                     successCount++;
                 } catch (error) {
@@ -543,7 +551,14 @@ class App {
 
                 for (const post of newPosts.reverse()) {
                     try {
-                        await discordAPI.sendPost(connection.webhookUrl, post);
+                        const formatted = tumblrAPI.formatPostForDisplay(post);
+                        if (formatted.video) {
+                            await discordAPI.sendVideoPost(connection.webhookUrl, post);
+                        } else if (formatted.images.length > 1) {
+                            await discordAPI.sendPostWithAllImages(connection.webhookUrl, post);
+                        } else {
+                            await discordAPI.sendPost(connection.webhookUrl, post);
+                        }
                         Storage.markPostsAsSynced(connection.id, [post.id]);
                         totalSynced++;
                     } catch (error) {
@@ -812,7 +827,14 @@ class App {
             try {
                 this.updateLoadingText(`Uploading post ${successCount + errorCount + 1} of ${selectedPosts.length}...`);
                 
-                await discordAPI.sendPost(post._webhookUrl, post);
+                const formatted = tumblrAPI.formatPostForDisplay(post);
+                if (formatted.video) {
+                    await discordAPI.sendVideoPost(post._webhookUrl, post);
+                } else if (formatted.images.length > 1) {
+                    await discordAPI.sendPostWithAllImages(post._webhookUrl, post);
+                } else {
+                    await discordAPI.sendPost(post._webhookUrl, post);
+                }
                 Storage.markPostsAsSynced(post._connectionId, [post.id]);
                 post._synced = true;
                 successCount++;

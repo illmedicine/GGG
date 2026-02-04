@@ -126,23 +126,30 @@ class DiscordAPI {
     /**
      * Create Discord embed from Tumblr post
      */
-    createEmbed(post, blogInfo = null) {
+    createEmbed(post, blogInfo = null, hideUserInfo = true) {
         const formatted = tumblrAPI.formatPostForDisplay(post);
-        const typeIcon = CONFIG.POST_TYPE_ICONS[post.type] || '📌';
-        const typeColor = CONFIG.POST_TYPE_COLORS[post.type] || 0x529ecc;
+        const typeIcon = CONFIG.POST_TYPE_ICONS[formatted.type] || '📌';
+        const typeColor = CONFIG.POST_TYPE_COLORS[formatted.type] || 0x529ecc;
+
+        // Clean the title to remove usernames
+        let cleanTitle = this.sanitizeTitle(formatted.title);
 
         const embed = {
-            title: `${typeIcon} ${this.truncate(formatted.title, 250)}`,
-            url: formatted.url,
+            title: `${typeIcon} ${this.truncate(cleanTitle, 250)}`,
             color: typeColor,
             timestamp: new Date(post.timestamp * 1000).toISOString(),
             footer: {
-                text: `${formatted.noteCount} notes • ${post.type}`,
+                text: `${formatted.noteCount} notes • ${formatted.type}`,
             }
         };
 
-        // Add author info
-        if (blogInfo || post.blog_name) {
+        // Only add URL if not hiding user info (URL contains username)
+        if (!hideUserInfo) {
+            embed.url = formatted.url;
+        }
+
+        // Add author info only if not hiding
+        if (!hideUserInfo && (blogInfo || post.blog_name)) {
             embed.author = {
                 name: blogInfo?.title || post.blog_name,
                 url: `https://${post.blog_name}.tumblr.com`,
@@ -150,9 +157,13 @@ class DiscordAPI {
             };
         }
 
-        // Add description
+        // Add description (sanitized if hiding user info)
         if (formatted.summary) {
-            embed.description = this.truncate(formatted.summary, 2000);
+            let description = formatted.summary;
+            if (hideUserInfo) {
+                description = this.sanitizeText(description);
+            }
+            embed.description = this.truncate(description, 2000);
         }
 
         // Add image
@@ -165,11 +176,11 @@ class DiscordAPI {
             if (!embed.description) {
                 embed.description = '';
             }
-            embed.description += `\n\n🎬 [Watch Video](${formatted.video})`;
+            embed.description += `\n\n🎬 Video attached`;
         }
 
-        // Add tags as field
-        if (formatted.tags && formatted.tags.length > 0) {
+        // Add tags as field (only if not hiding user info, tags can be identifying)
+        if (!hideUserInfo && formatted.tags && formatted.tags.length > 0) {
             const tagsText = formatted.tags.slice(0, 10).map(t => `#${t}`).join(' ');
             embed.fields = [{
                 name: 'Tags',
@@ -184,14 +195,18 @@ class DiscordAPI {
     /**
      * Create message payload for Tumblr post
      */
-    createPostMessage(post, blogInfo = null, customUsername = null) {
-        const embed = this.createEmbed(post, blogInfo);
+    createPostMessage(post, blogInfo = null, customUsername = null, hideUserInfo = true) {
+        const embed = this.createEmbed(post, blogInfo, hideUserInfo);
         
         const message = {
-            username: customUsername || `Tumblr • ${post.blog_name}`,
-            avatar_url: `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`,
+            username: customUsername || 'Media Bot',
             embeds: [embed]
         };
+
+        // Only add avatar if not hiding user info
+        if (!hideUserInfo) {
+            message.avatar_url = `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`;
+        }
 
         return message;
     }
@@ -199,8 +214,8 @@ class DiscordAPI {
     /**
      * Send Tumblr post to Discord
      */
-    async sendPost(webhookUrl, post, blogInfo = null, customUsername = null) {
-        const message = this.createPostMessage(post, blogInfo, customUsername);
+    async sendPost(webhookUrl, post, blogInfo = null, customUsername = null, hideUserInfo = true) {
+        const message = this.createPostMessage(post, blogInfo, customUsername, hideUserInfo);
         return await this.queueMessage(webhookUrl, message);
     }
 
@@ -264,6 +279,66 @@ class DiscordAPI {
         if (!text) return '';
         if (text.length <= maxLength) return text;
         return text.substring(0, maxLength - 3) + '...';
+    }
+
+    /**
+     * Sanitize title to remove Tumblr usernames and identifying info
+     */
+    sanitizeTitle(title) {
+        if (!title) return 'New Post';
+        
+        let clean = title;
+        
+        // Remove common Tumblr username patterns
+        // Pattern: username: or @username
+        clean = clean.replace(/@[\w-]+/g, '');
+        clean = clean.replace(/^[\w-]+:\s*/i, '');
+        
+        // Remove "reblogged from username" patterns
+        clean = clean.replace(/reblogged\s+from\s+[\w-]+/gi, '');
+        clean = clean.replace(/via\s+[\w-]+/gi, '');
+        clean = clean.replace(/source:\s*[\w-]+/gi, '');
+        
+        // Remove tumblr URLs
+        clean = clean.replace(/https?:\/\/[\w-]+\.tumblr\.com\S*/gi, '');
+        clean = clean.replace(/[\w-]+\.tumblr\.com/gi, '');
+        
+        // Clean up extra whitespace
+        clean = clean.replace(/\s+/g, ' ').trim();
+        
+        // If title is now empty or just punctuation, use generic title
+        if (!clean || clean.length < 3 || /^[\s\W]*$/.test(clean)) {
+            return 'New Post';
+        }
+        
+        return clean;
+    }
+
+    /**
+     * Sanitize text/description to remove usernames and identifying info
+     */
+    sanitizeText(text) {
+        if (!text) return '';
+        
+        let clean = text;
+        
+        // Remove @mentions
+        clean = clean.replace(/@[\w-]+/g, '');
+        
+        // Remove tumblr URLs
+        clean = clean.replace(/https?:\/\/[\w-]+\.tumblr\.com\S*/gi, '[link]');
+        clean = clean.replace(/[\w-]+\.tumblr\.com/gi, '');
+        
+        // Remove "reblogged from" and similar patterns
+        clean = clean.replace(/reblogged\s+from\s+[\w-]+/gi, '');
+        clean = clean.replace(/via\s+[\w-]+/gi, '');
+        clean = clean.replace(/source:\s*[\w-]+/gi, '');
+        clean = clean.replace(/posted\s+by\s+[\w-]+/gi, '');
+        
+        // Clean up extra whitespace
+        clean = clean.replace(/\s+/g, ' ').trim();
+        
+        return clean;
     }
 
     /**

@@ -44,7 +44,7 @@ class TumblrAPI {
     }
 
     /**
-     * Build API URL with CORS proxy
+     * Build direct API URL (JSONP style with callback)
      */
     buildApiUrl(endpoint, params = {}) {
         const url = new URL(`${CONFIG.TUMBLR_API_BASE}${endpoint}`);
@@ -59,54 +59,72 @@ class TumblrAPI {
             }
         }
 
-        // Use CORS proxy
-        const proxy = CONFIG.CORS_PROXIES[this.corsProxyIndex];
-        return proxy + encodeURIComponent(url.toString());
+        return url.toString();
     }
 
     /**
-     * Make API request with retry logic
+     * Make API request with multiple CORS proxy fallbacks
      */
     async makeRequest(endpoint, params = {}) {
         if (!this.apiKey) {
             throw new Error('Tumblr API key not configured. Please add your API key in Settings.');
         }
 
+        const baseUrl = this.buildApiUrl(endpoint, params);
         let lastError;
         
+        // List of CORS proxies to try
+        const corsProxies = [
+            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            (url) => `https://cors-anywhere.herokuapp.com/${url}`,
+            (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+        ];
+
         // Try each CORS proxy
-        for (let i = 0; i < CONFIG.CORS_PROXIES.length; i++) {
-            this.corsProxyIndex = i;
-            const url = this.buildApiUrl(endpoint, params);
+        for (let i = 0; i < corsProxies.length; i++) {
+            const proxyUrl = corsProxies[i](baseUrl);
+            console.log(`Trying CORS proxy ${i + 1}:`, proxyUrl);
             
             try {
-                const response = await fetch(url, {
+                const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: {
-                        'Accept': 'application/json'
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
                     }
                 });
 
                 if (!response.ok) {
                     const errorText = await response.text();
+                    console.warn(`Proxy ${i + 1} HTTP error:`, response.status, errorText);
                     throw new Error(`HTTP ${response.status}: ${errorText}`);
                 }
 
-                const data = await response.json();
+                const text = await response.text();
+                let data;
+                
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    console.warn(`Proxy ${i + 1} returned non-JSON:`, text.substring(0, 200));
+                    throw new Error('Invalid JSON response');
+                }
                 
                 if (data.meta && data.meta.status !== 200) {
                     throw new Error(data.meta.msg || 'Unknown Tumblr API error');
                 }
 
+                console.log(`Proxy ${i + 1} succeeded!`);
                 return data.response;
             } catch (error) {
                 lastError = error;
-                console.warn(`CORS proxy ${i} failed:`, error.message);
+                console.warn(`CORS proxy ${i + 1} failed:`, error.message);
                 // Continue to next proxy
             }
         }
 
-        throw lastError || new Error('All CORS proxies failed');
+        throw lastError || new Error('All CORS proxies failed. Please try again later.');
     }
 
     /**

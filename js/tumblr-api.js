@@ -206,7 +206,8 @@ class TumblrAPI {
             limit: Math.min(options.limit || CONFIG.MAX_POSTS_PER_REQUEST, 20),
             offset: options.offset || 0,
             reblog_info: true,
-            notes_info: true
+            notes_info: true,
+            npf: true  // Request NPF format for better content extraction
         };
 
         if (options.type) {
@@ -370,6 +371,24 @@ class TumblrAPI {
      */
     formatPostForDisplay(post) {
         const detectedType = this.detectPostType(post);
+        const images = this.getPostImages(post);
+        const video = this.getPostVideo(post);
+        
+        // Debug: log posts with no media detected
+        if (images.length === 0 && !video && (post.reblogged_from_name || post.trail?.length > 0)) {
+            console.log('Reblog with no media detected:', {
+                id: post.id,
+                type: post.type,
+                reblogged_from: post.reblogged_from_name,
+                has_content: !!post.content,
+                content_length: post.content?.length,
+                has_trail: !!post.trail,
+                trail_length: post.trail?.length,
+                has_reblog: !!post.reblog,
+                has_body: !!post.body,
+                post_keys: Object.keys(post)
+            });
+        }
         
         return {
             id: post.id,
@@ -381,8 +400,8 @@ class TumblrAPI {
             blogName: post.blog_name,
             title: this.getPostTitle(post),
             summary: this.getPostSummary(post),
-            images: this.getPostImages(post),
-            video: this.getPostVideo(post),
+            images: images,
+            video: video,
             noteCount: post.note_count || 0,
             tags: post.tags || [],
             isReblog: !!post.reblogged_from_name || (post.trail && post.trail.length > 0)
@@ -394,25 +413,40 @@ class TumblrAPI {
      */
     detectPostType(post) {
         // Check NPF content blocks first
-        if (post.content && Array.isArray(post.content)) {
-            for (const block of post.content) {
-                if (block.type === 'video') return 'video';
-                if (block.type === 'image') return 'photo';
-                if (block.type === 'audio') return 'audio';
-            }
-        }
+        if (this.hasMediaTypeInContent(post.content, 'video')) return 'video';
+        if (this.hasMediaTypeInContent(post.content, 'image')) return 'photo';
+        if (this.hasMediaTypeInContent(post.content, 'audio')) return 'audio';
 
         // Check reblog trail
         if (post.trail && Array.isArray(post.trail)) {
             for (const trail of post.trail) {
-                if (trail.content && Array.isArray(trail.content)) {
-                    for (const block of trail.content) {
-                        if (block.type === 'video') return 'video';
-                        if (block.type === 'image') return 'photo';
-                        if (block.type === 'audio') return 'audio';
-                    }
+                if (this.hasMediaTypeInContent(trail.content, 'video')) return 'video';
+                if (this.hasMediaTypeInContent(trail.content, 'image')) return 'photo';
+                if (this.hasMediaTypeInContent(trail.content, 'audio')) return 'audio';
+                
+                // Check trail HTML content
+                if (trail.content_raw) {
+                    if (this.htmlHasVideo(trail.content_raw)) return 'video';
+                    if (this.htmlHasImage(trail.content_raw)) return 'photo';
                 }
             }
+        }
+
+        // Check reblog object
+        if (post.reblog) {
+            const reblogHtml = (post.reblog.comment || '') + (post.reblog.tree_html || '');
+            if (this.htmlHasVideo(reblogHtml)) return 'video';
+            if (this.htmlHasImage(reblogHtml)) return 'photo';
+        }
+
+        // Check caption/body HTML
+        if (post.caption) {
+            if (this.htmlHasVideo(post.caption)) return 'video';
+            if (this.htmlHasImage(post.caption)) return 'photo';
+        }
+        if (post.body) {
+            if (this.htmlHasVideo(post.body)) return 'video';
+            if (this.htmlHasImage(post.body)) return 'photo';
         }
 
         // Legacy checks
@@ -422,6 +456,30 @@ class TumblrAPI {
         
         // Return original type
         return post.type;
+    }
+
+    /**
+     * Check if content array has specific media type
+     */
+    hasMediaTypeInContent(content, mediaType) {
+        if (!content || !Array.isArray(content)) return false;
+        return content.some(block => block.type === mediaType);
+    }
+
+    /**
+     * Check if HTML contains video elements
+     */
+    htmlHasVideo(html) {
+        if (!html) return false;
+        return /<video|<iframe|<embed/i.test(html);
+    }
+
+    /**
+     * Check if HTML contains image elements
+     */
+    htmlHasImage(html) {
+        if (!html) return false;
+        return /<img[^>]+src=/i.test(html);
     }
 
     /**
@@ -469,75 +527,148 @@ class TumblrAPI {
     }
 
     /**
-     * Get post images - handles both legacy and NPF formats
+     * Extract image URL from NPF media block
+     */
+    extractImageFromMedia(media) {
+        if (!media) return null;
+        
+        if (Array.isArray(media)) {
+            // Get the largest image from the array
+            const largest = media.reduce((a, b) => 
+                (a.width || 0) > (b.width || 0) ? a : b
+            , media[0]);
+            return largest?.url || null;
+        }
+        
+        return media.url || null;
+    }
+
+    /**
+     * Extract images from content blocks (NPF format)
+     */
+    extractImagesFromContent(content, images) {
+        if (!content || !Array.isArray(content)) return;
+        
+        for (const block of content) {
+            if (block.type === 'image') {
+                const url = this.extractImageFromMedia(block.media);
+                if (url && !images.includes(url)) {
+                    images.push(url);
+                }
+            }
+            // Some blocks have nested content
+            if (block.content) {
+                this.extractImagesFromContent(block.content, images);
+            }
+        }
+    }
+
+    /**
+     * Get post images - handles legacy, NPF, and reblog formats
      */
     getPostImages(post) {
         const images = [];
 
-        // Legacy format - photos array
+        // 1. Legacy format - photos array (direct photo posts)
         if (post.photos && post.photos.length > 0) {
             for (const photo of post.photos) {
-                if (photo.original_size) {
+                if (photo.original_size?.url) {
                     images.push(photo.original_size.url);
-                } else if (photo.alt_sizes && photo.alt_sizes.length > 0) {
+                } else if (photo.alt_sizes?.[0]?.url) {
                     images.push(photo.alt_sizes[0].url);
                 }
             }
         }
 
-        // NPF format - content blocks
-        if (post.content && Array.isArray(post.content)) {
-            for (const block of post.content) {
-                if (block.type === 'image' && block.media) {
-                    // Get the largest image
-                    if (Array.isArray(block.media)) {
-                        const largest = block.media.reduce((a, b) => 
-                            (a.width || 0) > (b.width || 0) ? a : b
-                        , block.media[0]);
-                        if (largest && largest.url) {
-                            images.push(largest.url);
-                        }
-                    } else if (block.media.url) {
-                        images.push(block.media.url);
-                    }
-                }
-            }
-        }
+        // 2. NPF format - main content blocks
+        this.extractImagesFromContent(post.content, images);
 
-        // Check reblog trail for images
+        // 3. Reblog trail - where reblogged content usually lives
         if (post.trail && Array.isArray(post.trail)) {
             for (const trail of post.trail) {
-                if (trail.content && Array.isArray(trail.content)) {
-                    for (const block of trail.content) {
-                        if (block.type === 'image' && block.media) {
-                            if (Array.isArray(block.media)) {
-                                const largest = block.media.reduce((a, b) => 
-                                    (a.width || 0) > (b.width || 0) ? a : b
-                                , block.media[0]);
-                                if (largest && largest.url && !images.includes(largest.url)) {
-                                    images.push(largest.url);
-                                }
-                            } else if (block.media.url && !images.includes(block.media.url)) {
-                                images.push(block.media.url);
-                            }
-                        }
-                    }
+                // Trail content blocks (NPF)
+                this.extractImagesFromContent(trail.content, images);
+                
+                // Trail might have content_raw with HTML
+                if (trail.content_raw) {
+                    this.extractImagesFromHtml(trail.content_raw, images);
                 }
             }
         }
 
-        // Check for inline images in body (legacy)
+        // 4. Reblog object - another location for reblogged content
+        if (post.reblog) {
+            if (post.reblog.comment) {
+                this.extractImagesFromHtml(post.reblog.comment, images);
+            }
+            if (post.reblog.tree_html) {
+                this.extractImagesFromHtml(post.reblog.tree_html, images);
+            }
+        }
+
+        // 5. Caption field (photo posts)
+        if (post.caption) {
+            this.extractImagesFromHtml(post.caption, images);
+        }
+
+        // 6. Body field (text posts, legacy)
         if (post.body) {
-            const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
-            let match;
-            while ((match = imgRegex.exec(post.body)) !== null) {
-                if (!images.includes(match[1])) {
-                    images.push(match[1]);
+            this.extractImagesFromHtml(post.body, images);
+        }
+
+        // 7. Photoset layouts sometimes have image data
+        if (post.photoset_photos && Array.isArray(post.photoset_photos)) {
+            for (const photo of post.photoset_photos) {
+                if (photo.url && !images.includes(photo.url)) {
+                    images.push(photo.url);
                 }
+            }
+        }
+
+        // 8. Source URL might be an image
+        if (post.source_url && /\.(jpg|jpeg|png|gif|webp)/i.test(post.source_url)) {
+            if (!images.includes(post.source_url)) {
+                images.push(post.source_url);
             }
         }
 
         return images;
+    }
+
+    /**
+     * Extract images from HTML content
+     */
+    extractImagesFromHtml(html, images) {
+        if (!html) return;
+        
+        // Match img tags
+        const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
+        let match;
+        while ((match = imgRegex.exec(html)) !== null) {
+            const url = match[1];
+            // Filter out tracking pixels and small images
+            if (url && !images.includes(url) && !url.includes('pixel') && !url.includes('beacon')) {
+                images.push(url);
+            }
+        }
+        
+        // Match data-src for lazy loaded images
+        const dataSrcRegex = /data-src=["']([^"']+)["']/gi;
+        while ((match = dataSrcRegex.exec(html)) !== null) {
+            const url = match[1];
+            if (url && !images.includes(url)) {
+                images.push(url);
+            }
+        }
+        
+        // Match figure/picture source elements
+        const sourceRegex = /<source[^>]+srcset=["']([^"'\s,]+)/gi;
+        while ((match = sourceRegex.exec(html)) !== null) {
+            const url = match[1];
+            if (url && !images.includes(url)) {
+                images.push(url);
+            }
+        }
     }
 
     /**
@@ -550,30 +681,32 @@ class TumblrAPI {
         }
         
         // NPF format - content blocks
-        if (post.content && Array.isArray(post.content)) {
-            for (const block of post.content) {
-                if (block.type === 'video') {
-                    if (block.url) {
-                        return block.url;
-                    }
-                    if (block.media && block.media.url) {
-                        return block.media.url;
-                    }
-                }
-            }
-        }
+        const videoFromContent = this.extractVideoFromContent(post.content);
+        if (videoFromContent) return videoFromContent;
 
         // Check reblog trail for videos
         if (post.trail && Array.isArray(post.trail)) {
             for (const trail of post.trail) {
-                if (trail.content && Array.isArray(trail.content)) {
-                    for (const block of trail.content) {
-                        if (block.type === 'video') {
-                            if (block.url) return block.url;
-                            if (block.media && block.media.url) return block.media.url;
-                        }
-                    }
+                const videoFromTrail = this.extractVideoFromContent(trail.content);
+                if (videoFromTrail) return videoFromTrail;
+                
+                // Check trail content_raw for embedded videos
+                if (trail.content_raw) {
+                    const videoFromHtml = this.extractVideoFromHtml(trail.content_raw);
+                    if (videoFromHtml) return videoFromHtml;
                 }
+            }
+        }
+
+        // Check reblog object for videos
+        if (post.reblog) {
+            if (post.reblog.comment) {
+                const videoFromComment = this.extractVideoFromHtml(post.reblog.comment);
+                if (videoFromComment) return videoFromComment;
+            }
+            if (post.reblog.tree_html) {
+                const videoFromTree = this.extractVideoFromHtml(post.reblog.tree_html);
+                if (videoFromTree) return videoFromTree;
             }
         }
         
@@ -589,6 +722,65 @@ class TumblrAPI {
             }
         }
 
+        // Check caption/body for video embeds
+        if (post.caption) {
+            const videoFromCaption = this.extractVideoFromHtml(post.caption);
+            if (videoFromCaption) return videoFromCaption;
+        }
+
+        if (post.body) {
+            const videoFromBody = this.extractVideoFromHtml(post.body);
+            if (videoFromBody) return videoFromBody;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract video from NPF content blocks
+     */
+    extractVideoFromContent(content) {
+        if (!content || !Array.isArray(content)) return null;
+        
+        for (const block of content) {
+            if (block.type === 'video') {
+                if (block.url) return block.url;
+                if (block.media?.url) return block.media.url;
+                // Some video blocks have embed_url
+                if (block.embed_url) return block.embed_url;
+                // External video providers
+                if (block.provider) {
+                    if (block.embed_html) {
+                        const srcMatch = block.embed_html.match(/src=["']([^"']+)["']/i);
+                        if (srcMatch) return srcMatch[1];
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extract video from HTML content
+     */
+    extractVideoFromHtml(html) {
+        if (!html) return null;
+        
+        // Match video source tags
+        const videoRegex = /<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["']/gi;
+        let match = videoRegex.exec(html);
+        if (match) return match[1];
+        
+        // Match video src directly
+        const videoSrcRegex = /<video[^>]+src=["']([^"']+)["']/gi;
+        match = videoSrcRegex.exec(html);
+        if (match) return match[1];
+        
+        // Match iframe embeds (YouTube, Vimeo, etc.)
+        const iframeRegex = /<iframe[^>]+src=["']([^"']+)["']/gi;
+        match = iframeRegex.exec(html);
+        if (match) return match[1];
+        
         return null;
     }
 

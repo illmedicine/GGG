@@ -703,6 +703,23 @@ class App {
             // Debug logging for media detection
             console.log(`Formatted post: ${formatted.type} (original: ${formatted.originalType}) - ${formatted.images.length} images, video: ${formatted.video ? 'yes' : 'no'}`);
             
+            // Determine what preview to show
+            let previewHtml = '';
+            if (formatted.images.length > 0) {
+                previewHtml = `
+                    <div class="history-preview">
+                        <img src="${formatted.images[0]}" alt="Preview" onerror="this.parentElement.innerHTML='<div class=\\'preview-placeholder\\'><i class=\\'fas fa-image\\'></i></div>'">
+                    </div>`;
+            } else if (formatted.video) {
+                previewHtml = `
+                    <div class="history-preview video-preview">
+                        <div class="preview-placeholder video">
+                            <i class="fas fa-play-circle"></i>
+                            <span>Video</span>
+                        </div>
+                    </div>`;
+            }
+            
             return `
                 <div class="history-item ${isSelected ? 'selected' : ''}" data-id="${post.id}">
                     <div class="history-checkbox">
@@ -722,13 +739,10 @@ class App {
                             ${post._synced ? '<span class="badge enabled">Already synced</span>' : ''}
                         </div>
                     </div>
-                    ${formatted.images.length > 0 ? `
-                        <div class="history-preview">
-                            <img src="${formatted.images[0]}" alt="Preview">
-                        </div>
-                    ` : ''}
+                    ${previewHtml}
                 </div>
             `;
+        }).join('');
         }).join('');
 
         // Add checkbox listeners

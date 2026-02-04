@@ -625,12 +625,42 @@ a:hover {
     border-radius: 8px;
     overflow: hidden;
     background: var(--bg-secondary);
+    flex-shrink: 0;
 }
 
 .history-preview img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+.history-preview .preview-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.history-preview .preview-placeholder i {
+    font-size: 2rem;
+    margin-bottom: 5px;
+}
+
+.history-preview .preview-placeholder span {
+    font-size: 0.75rem;
+}
+
+.history-preview .preview-placeholder.video {
+    background: linear-gradient(135deg, var(--bg-tertiary), #2d1f3d);
+    color: var(--tumblr-blue);
+}
+
+.history-preview .preview-placeholder.video i {
+    color: #9b59b6;
 }
 
 /* Settings Grid */

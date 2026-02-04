@@ -166,6 +166,11 @@
                             <label>API Key (Consumer Key)</label>
                             <input type="text" id="tumblrApiKey" class="form-input" placeholder="Enter your Tumblr API key">
                         </div>
+                        <div class="form-group">
+                            <label>Custom CORS Proxy URL (Optional)</label>
+                            <input type="text" id="corsProxyUrl" class="form-input" placeholder="https://your-worker.workers.dev">
+                            <small>Deploy your own proxy using <a href="worker/cors-proxy.js" target="_blank">this Cloudflare Worker</a> for reliable access. Leave blank to use public proxies.</small>
+                        </div>
                         <button class="btn btn-primary" id="saveTumblrConfig">Save Tumblr Config</button>
                     </div>
 
@@ -302,10 +307,10 @@
         <p id="loadingText">Loading...</p>
     </div>
 
-    <script src="js/config.js?v=2"></script>
-    <script src="js/storage.js?v=2"></script>
-    <script src="js/tumblr-api.js?v=2"></script>
-    <script src="js/discord-api.js?v=2"></script>
-    <script src="js/app.js?v=2"></script>
+    <script src="js/config.js?v=3"></script>
+    <script src="js/storage.js?v=3"></script>
+    <script src="js/tumblr-api.js?v=3"></script>
+    <script src="js/discord-api.js?v=3"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>

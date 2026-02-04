@@ -73,10 +73,30 @@ class TumblrAPI {
         const baseUrl = this.buildApiUrl(endpoint, params);
         let lastError;
         
+        // Check if user has configured a custom CORS proxy
+        const customProxy = localStorage.getItem('tumblr2discord_cors_proxy');
+        
         // List of CORS proxies to try (ordered by reliability)
-        const corsProxies = [
+        const corsProxies = [];
+        
+        // Add custom proxy first if configured
+        if (customProxy) {
+            corsProxies.push({
+                name: 'custom',
+                build: (url) => `${customProxy}?url=${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            });
+        }
+        
+        // Add fallback proxies
+        corsProxies.push(
             {
-                name: 'allorigins',
+                name: 'codetabs',
+                build: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            },
+            {
+                name: 'allorigins-get',
                 build: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
                 parse: (text) => {
                     const wrapper = JSON.parse(text);
@@ -84,16 +104,11 @@ class TumblrAPI {
                 }
             },
             {
-                name: 'corsproxy.io',
-                build: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-                parse: (text) => JSON.parse(text)
-            },
-            {
-                name: 'cors.sh',
-                build: (url) => `https://proxy.cors.sh/${url}`,
+                name: 'corsproxy-org',
+                build: (url) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
                 parse: (text) => JSON.parse(text)
             }
-        ];
+        );
 
         // Try each CORS proxy
         for (let i = 0; i < corsProxies.length; i++) {
@@ -102,12 +117,18 @@ class TumblrAPI {
             console.log(`Trying CORS proxy ${i + 1} (${proxy.name}):`, proxyUrl);
             
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+                
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json'
-                    }
+                    },
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -138,7 +159,7 @@ class TumblrAPI {
             }
         }
 
-        throw lastError || new Error('All CORS proxies failed. Please try again later.');
+        throw new Error('All CORS proxies failed. Please set up a custom CORS proxy in Settings. See README for instructions.');
     }
 
     /**

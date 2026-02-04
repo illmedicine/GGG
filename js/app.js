@@ -820,13 +820,23 @@ class App {
         // Tumblr API config
         document.getElementById('saveTumblrConfig').addEventListener('click', () => {
             const apiKey = document.getElementById('tumblrApiKey').value.trim();
+            const corsProxy = document.getElementById('corsProxyUrl').value.trim();
+            
             if (!apiKey) {
                 this.showToast('Please enter an API key', 'error');
                 return;
             }
             Storage.setTumblrApiKey(apiKey);
             tumblrAPI.setApiKey(apiKey);
-            this.showToast('Tumblr API key saved', 'success');
+            
+            // Save CORS proxy
+            if (corsProxy) {
+                localStorage.setItem('tumblr2discord_cors_proxy', corsProxy);
+            } else {
+                localStorage.removeItem('tumblr2discord_cors_proxy');
+            }
+            
+            this.showToast('Tumblr config saved', 'success');
         });
 
         // Auto-sync config
@@ -883,8 +893,10 @@ class App {
     loadSettings() {
         const apiKey = Storage.getTumblrApiKey();
         const settings = Storage.getSettings();
+        const corsProxy = localStorage.getItem('tumblr2discord_cors_proxy') || '';
 
         document.getElementById('tumblrApiKey').value = apiKey;
+        document.getElementById('corsProxyUrl').value = corsProxy;
         document.getElementById('autoSyncEnabled').checked = settings.autoSyncEnabled;
         document.getElementById('syncInterval').value = settings.syncInterval;
         document.getElementById('browserNotifications').checked = settings.browserNotifications;

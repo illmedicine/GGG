@@ -73,25 +73,39 @@ class TumblrAPI {
         const baseUrl = this.buildApiUrl(endpoint, params);
         let lastError;
         
-        // List of CORS proxies to try
+        // List of CORS proxies to try (ordered by reliability)
         const corsProxies = [
-            (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            (url) => `https://cors-anywhere.herokuapp.com/${url}`,
-            (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+            {
+                name: 'allorigins',
+                build: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                parse: (text) => {
+                    const wrapper = JSON.parse(text);
+                    return JSON.parse(wrapper.contents);
+                }
+            },
+            {
+                name: 'corsproxy.io',
+                build: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            },
+            {
+                name: 'cors.sh',
+                build: (url) => `https://proxy.cors.sh/${url}`,
+                parse: (text) => JSON.parse(text)
+            }
         ];
 
         // Try each CORS proxy
         for (let i = 0; i < corsProxies.length; i++) {
-            const proxyUrl = corsProxies[i](baseUrl);
-            console.log(`Trying CORS proxy ${i + 1}:`, proxyUrl);
+            const proxy = corsProxies[i];
+            const proxyUrl = proxy.build(baseUrl);
+            console.log(`Trying CORS proxy ${i + 1} (${proxy.name}):`, proxyUrl);
             
             try {
                 const response = await fetch(proxyUrl, {
                     method: 'GET',
                     headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'Accept': 'application/json'
                     }
                 });
 
@@ -105,9 +119,9 @@ class TumblrAPI {
                 let data;
                 
                 try {
-                    data = JSON.parse(text);
+                    data = proxy.parse(text);
                 } catch (e) {
-                    console.warn(`Proxy ${i + 1} returned non-JSON:`, text.substring(0, 200));
+                    console.warn(`Proxy ${i + 1} parse error:`, e.message, text.substring(0, 200));
                     throw new Error('Invalid JSON response');
                 }
                 
@@ -115,11 +129,11 @@ class TumblrAPI {
                     throw new Error(data.meta.msg || 'Unknown Tumblr API error');
                 }
 
-                console.log(`Proxy ${i + 1} succeeded!`);
+                console.log(`Proxy ${i + 1} (${proxy.name}) succeeded!`);
                 return data.response;
             } catch (error) {
                 lastError = error;
-                console.warn(`CORS proxy ${i + 1} failed:`, error.message);
+                console.warn(`CORS proxy ${i + 1} (${proxy.name}) failed:`, error.message);
                 // Continue to next proxy
             }
         }

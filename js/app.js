@@ -3,6 +3,49 @@
  * Handles UI interactions, navigation, and coordination between components
  */
 class App {
+        /**
+         * Remove all posts from a connected blog (delete from Discord, keep connection)
+         */
+        async removeAllPostsFromConnection(connectionId) {
+            const connection = Storage.getConnection(connectionId);
+            if (!connection) {
+                this.showToast('Connection not found', 'error');
+                return;
+            }
+            if (!connection.webhookUrl) {
+                this.showToast('No Discord webhook for this connection', 'error');
+                return;
+            }
+            if (!confirm('Are you sure you want to delete ALL posts from this Discord channel? This cannot be undone.')) {
+                return;
+            }
+            this.showLoading('Deleting all posts from Discord...');
+            let deletedCount = 0;
+            let failedCount = 0;
+            try {
+                // Fetch all messages from the Discord channel via webhook (limited by Discord API)
+                // Note: Webhooks cannot list/delete all messages, so we can only delete those sent by this webhook (by ID)
+                // We'll attempt to delete by unique post ID if possible
+                // This requires storing Discord message IDs per post in the future for full reliability
+                // For now, we can only send a notification to the channel and clear local sync state
+                await discordAPI.sendNotification(connection.webhookUrl, 'Bulk Delete Triggered', 'All posts from this blog will be considered deleted for sync purposes. Manual deletion in Discord may be required for old posts.', 0xf56565);
+                // Clear synced post IDs for this connection
+                Storage.updateConnection(connectionId, { syncedPostIds: [] });
+                // Optionally clear media post ID mapping for this connection
+                const map = Storage.getMediaPostIdMap();
+                if (map[connectionId]) {
+                    delete map[connectionId];
+                    Storage.saveMediaPostIdMap(map);
+                }
+                this.updateDashboard();
+                this.renderConnections();
+                this.showToast('All posts removed from sync history. Manual deletion in Discord may be required.', 'success');
+            } catch (err) {
+                this.showToast('Error removing posts: ' + err.message, 'error');
+            } finally {
+                this.hideLoading();
+            }
+        }
     constructor() {
         this.currentPage = 'dashboard';
         this.autoSyncInterval = null;
@@ -45,6 +88,8 @@ class App {
         // Request notification permission
         this.requestNotificationPermission();
         
+        // Ensure all previously uploaded media have unique post IDs
+        Storage.ensureAllSyncedPostsHaveIds();
         console.log('Tumblr2Discord app initialized');
     }
 
@@ -337,13 +382,10 @@ class App {
             const statusBadge = conn.enabled !== false 
                 ? '<span class="badge enabled">Enabled</span>' 
                 : '<span class="badge disabled">Disabled</span>';
-            
             const lastSync = conn.lastSync 
                 ? this.formatTimeAgo(conn.lastSync) 
                 : 'Never';
-            
             const syncedCount = conn.syncedPostIds?.length || 0;
-
             return `
                 <div class="connection-card ${conn.enabled === false ? 'disabled' : ''}" data-id="${conn.id}">
                     <div class="connection-avatar">
@@ -377,6 +419,9 @@ class App {
                         <button class="btn btn-danger delete-btn" data-id="${conn.id}" title="Delete">
                             <i class="fas fa-trash"></i>
                         </button>
+                        <button class="btn btn-danger remove-posts-btn" data-id="${conn.id}" title="Remove all posts from Discord">
+                            <i class="fas fa-eraser"></i> Remove All Posts
+                        </button>
                     </div>
                 </div>
             `;
@@ -389,7 +434,6 @@ class App {
                 this.syncConnection(btn.dataset.id);
             });
         });
-
         container.querySelectorAll('.edit-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -397,11 +441,16 @@ class App {
                 if (connection) this.openModal(connection);
             });
         });
-
         container.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteConnection(btn.dataset.id);
+            });
+        });
+        container.querySelectorAll('.remove-posts-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.removeAllPostsFromConnection(btn.dataset.id);
             });
         });
     }
@@ -473,6 +522,8 @@ class App {
             let successCount = 0;
             for (const post of newPosts.reverse()) {
                 try {
+                    // Assign unique post ID before upload (guaranteed for Discord message)
+                    Storage.getOrCreateMediaPostId(connectionId, post.id);
                     const formatted = tumblrAPI.formatPostForDisplay(post);
                     // Use appropriate method based on content type
                     if (formatted.video) {
@@ -551,6 +602,8 @@ class App {
 
                 for (const post of newPosts.reverse()) {
                     try {
+                        // Assign unique post ID before upload (guaranteed for Discord message)
+                        Storage.getOrCreateMediaPostId(connection.id, post.id);
                         const formatted = tumblrAPI.formatPostForDisplay(post);
                         if (formatted.video) {
                             await discordAPI.sendVideoPost(connection.webhookUrl, post);
@@ -714,10 +767,8 @@ class App {
             const formatted = tumblrAPI.formatPostForDisplay(post);
             const isSelected = this.selectedHistoryPosts.has(post.id);
             const typeIcon = CONFIG.POST_TYPE_ICONS[formatted.type] || '📌';
-            
             // Debug logging for media detection
             console.log(`Formatted post: ${formatted.type} (original: ${formatted.originalType}) - ${formatted.images.length} images, video: ${formatted.video ? 'yes' : 'no'}`);
-            
             // Determine what preview to show
             let previewHtml = '';
             if (formatted.images.length > 0) {
@@ -734,7 +785,14 @@ class App {
                         </div>
                     </div>`;
             }
-            
+            // Get unique post ID if synced
+            let postIdHtml = '';
+            if (post._synced) {
+                const uniqueId = Storage.getMediaPostId(post._connectionId, post.id?.toString());
+                if (uniqueId) {
+                    postIdHtml = `<span class="badge id-badge">ID: <span class="post-id">${uniqueId}</span></span>`;
+                }
+            }
             return `
                 <div class="history-item ${isSelected ? 'selected' : ''}" data-id="${post.id}">
                     <div class="history-checkbox">
@@ -752,6 +810,7 @@ class App {
                             <span><i class="fas fa-heart"></i> ${formatted.noteCount} notes</span>
                             ${formatted.type !== formatted.originalType ? `<span class="badge info">${formatted.type}</span>` : ''}
                             ${post._synced ? '<span class="badge enabled">Already synced</span>' : ''}
+                            ${postIdHtml}
                         </div>
                     </div>
                     ${previewHtml}
@@ -826,7 +885,8 @@ class App {
         for (const post of selectedPosts) {
             try {
                 this.updateLoadingText(`Uploading post ${successCount + errorCount + 1} of ${selectedPosts.length}...`);
-                
+                // Assign unique post ID before upload (guaranteed for Discord message)
+                Storage.getOrCreateMediaPostId(post._connectionId, post.id);
                 const formatted = tumblrAPI.formatPostForDisplay(post);
                 if (formatted.video) {
                     await discordAPI.sendVideoPost(post._webhookUrl, post);

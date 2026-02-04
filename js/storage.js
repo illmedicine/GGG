@@ -3,6 +3,61 @@
  * Handles persistence of settings, connections, and sync history
  */
 class Storage {
+        /**
+         * Get or initialize the media post ID map from localStorage
+         * Structure: { [connectionId]: { [tumblrPostId]: uniquePostId } }
+         */
+        static getMediaPostIdMap() {
+            const data = localStorage.getItem(CONFIG.STORAGE_KEYS.MEDIA_POST_IDS || 'mediaPostIds');
+            return data ? JSON.parse(data) : {};
+        }
+
+        /**
+         * Save the media post ID map to localStorage
+         */
+        static saveMediaPostIdMap(map) {
+            localStorage.setItem(CONFIG.STORAGE_KEYS.MEDIA_POST_IDS || 'mediaPostIds', JSON.stringify(map));
+        }
+
+        /**
+         * Get the unique post ID for a Tumblr post (per connection). If not present, generate and persist it.
+         */
+        static getOrCreateMediaPostId(connectionId, tumblrPostId) {
+            const map = this.getMediaPostIdMap();
+            if (!map[connectionId]) map[connectionId] = {};
+            if (!map[connectionId][tumblrPostId]) {
+                map[connectionId][tumblrPostId] = this.generateId();
+                this.saveMediaPostIdMap(map);
+            }
+            return map[connectionId][tumblrPostId];
+        }
+
+        /**
+         * Get the unique post ID for a Tumblr post (per connection), or null if not present.
+         */
+        static getMediaPostId(connectionId, tumblrPostId) {
+            const map = this.getMediaPostIdMap();
+            return map[connectionId]?.[tumblrPostId] || null;
+        }
+
+        /**
+         * Assign IDs to all synced posts for all connections (retroactive assignment)
+         */
+        static ensureAllSyncedPostsHaveIds() {
+            const connections = this.getConnections();
+            let changed = false;
+            const map = this.getMediaPostIdMap();
+            for (const conn of connections) {
+                if (!map[conn.id]) map[conn.id] = {};
+                for (const tumblrPostId of conn.syncedPostIds || []) {
+                    if (!map[conn.id][tumblrPostId]) {
+                        map[conn.id][tumblrPostId] = this.generateId();
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) this.saveMediaPostIdMap(map);
+        }
     /**
      * Get Tumblr API key
      */

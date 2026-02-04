@@ -130,24 +130,25 @@ class DiscordAPI {
         const formatted = tumblrAPI.formatPostForDisplay(post);
         const typeIcon = CONFIG.POST_TYPE_ICONS[formatted.type] || '📌';
         const typeColor = CONFIG.POST_TYPE_COLORS[formatted.type] || 0x529ecc;
-
         // Clean the title to remove usernames
         let cleanTitle = this.sanitizeTitle(formatted.title);
-
+        // Get unique post ID (assign if needed)
+        let uniquePostId = null;
+        if (post._connectionId && post.id) {
+            uniquePostId = Storage.getOrCreateMediaPostId(post._connectionId, post.id);
+        }
         const embed = {
             title: `${typeIcon} ${this.truncate(cleanTitle, 250)}`,
             color: typeColor,
             timestamp: new Date(post.timestamp * 1000).toISOString(),
             footer: {
-                text: `${formatted.noteCount} notes • ${formatted.type}`,
+                text: `${uniquePostId ? `ID: ${uniquePostId} • ` : ''}${formatted.noteCount} notes • ${formatted.type}`,
             }
         };
-
         // Only add URL if not hiding user info (URL contains username)
         if (!hideUserInfo) {
             embed.url = formatted.url;
         }
-
         // Add author info only if not hiding
         if (!hideUserInfo && (blogInfo || post.blog_name)) {
             embed.author = {
@@ -156,7 +157,6 @@ class DiscordAPI {
                 icon_url: blogInfo?.avatar?.[0]?.url || `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`
             };
         }
-
         // Add description (sanitized if hiding user info)
         if (formatted.summary) {
             let description = formatted.summary;
@@ -165,12 +165,10 @@ class DiscordAPI {
             }
             embed.description = this.truncate(description, 2000);
         }
-
         // Add image
         if (formatted.images && formatted.images.length > 0) {
             embed.image = { url: formatted.images[0] };
         }
-
         // Add video - post direct URL for Discord to embed if possible
         if (formatted.video) {
             if (!embed.description) {
@@ -179,7 +177,6 @@ class DiscordAPI {
             // Add video URL directly - Discord will try to embed it
             embed.description += `\n\n🎬 ${formatted.video}`;
         }
-
         // Add tags as field (only if not hiding user info, tags can be identifying)
         if (!hideUserInfo && formatted.tags && formatted.tags.length > 0) {
             const tagsText = formatted.tags.slice(0, 10).map(t => `#${t}`).join(' ');
@@ -189,7 +186,6 @@ class DiscordAPI {
                 inline: false
             }];
         }
-
         return embed;
     }
 

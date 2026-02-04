@@ -1,3 +1,19 @@
+.id-badge {
+    background: rgba(82, 158, 204, 0.15);
+    color: var(--tumblr-light);
+    border: 1px solid var(--tumblr-light);
+    font-size: 0.75rem;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-weight: bold;
+}
+.post-id {
+    color: var(--discord-purple);
+    font-family: monospace;
+    font-size: 0.85em;
+}
 /* CSS Variables */
 :root {
     --tumblr-blue: #35465c;

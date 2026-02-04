@@ -226,6 +226,9 @@ class TumblrAPI {
         cutoffDate.setDate(cutoffDate.getDate() - days);
         const cutoffTimestamp = Math.floor(cutoffDate.getTime() / 1000);
 
+        console.log(`Fetching posts from ${cleanName} since ${cutoffDate.toLocaleDateString()} (${days} days ago)`);
+        console.log(`Post types filter:`, postTypes.length > 0 ? postTypes : 'ALL');
+
         const allPosts = [];
         let offset = 0;
         let hasMore = true;
@@ -241,19 +244,24 @@ class TumblrAPI {
                 offset
             });
 
+            console.log(`Fetched ${posts.length} posts (offset: ${offset}, total: ${totalPosts})`);
+
             if (posts.length === 0) {
                 hasMore = false;
                 break;
             }
 
             for (const post of posts) {
+                console.log(`Post: ${post.type} - ${new Date(post.timestamp * 1000).toLocaleDateString()} - ${post.summary?.substring(0, 50) || post.id}`);
+                
                 // Check if post is within date range
                 if (post.timestamp < cutoffTimestamp) {
+                    console.log(`Post too old, stopping fetch`);
                     hasMore = false;
                     break;
                 }
 
-                // Filter by post type if specified
+                // Include all posts if no filter, or filter by post type
                 if (postTypes.length === 0 || postTypes.includes(post.type)) {
                     allPosts.push(post);
                 }
@@ -263,10 +271,12 @@ class TumblrAPI {
             
             // Safety limit to prevent infinite loops
             if (offset >= 500) {
+                console.log('Reached 500 post limit');
                 hasMore = false;
             }
         }
 
+        console.log(`Found ${allPosts.length} posts within ${days} days`);
         return allPosts;
     }
 

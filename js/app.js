@@ -641,11 +641,16 @@ class App {
             for (const connection of connections) {
                 this.updateLoadingText(`Fetching from ${connection.name}...`);
                 
+                console.log(`Fetching history for ${connection.tumblrBlog}, days: ${days}`);
+                
+                // Fetch ALL post types, don't filter
                 const posts = await tumblrAPI.getPostsSince(
                     connection.tumblrBlog, 
                     days, 
-                    connection.postTypes
+                    [] // Empty array = all post types
                 );
+
+                console.log(`Got ${posts.length} posts from ${connection.tumblrBlog}`);
 
                 // Add connection info to each post
                 posts.forEach(post => {
@@ -661,9 +666,17 @@ class App {
             // Sort by date descending
             this.historyPosts.sort((a, b) => b.timestamp - a.timestamp);
 
+            console.log(`Total history posts: ${this.historyPosts.length}`);
+            
             this.renderHistoryList();
-            this.showToast(`Found ${this.historyPosts.length} posts`, 'success');
+            
+            if (this.historyPosts.length === 0) {
+                this.showToast(`No posts found in the last ${days} days. Try increasing the days.`, 'warning');
+            } else {
+                this.showToast(`Found ${this.historyPosts.length} posts`, 'success');
+            }
         } catch (error) {
+            console.error('Fetch history error:', error);
             this.showToast(`Error fetching history: ${error.message}`, 'error');
         } finally {
             this.hideLoading();

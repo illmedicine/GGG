@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tumblr to Discord Sync | GGG</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fab fa-tumblr"></i>
+                <span>Tumblr2Discord</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="nav-item" data-page="connections">
+                    <i class="fas fa-link"></i>
+                    <span>Connections</span>
+                </li>
+                <li class="nav-item" data-page="history">
+                    <i class="fas fa-history"></i>
+                    <span>History</span>
+                </li>
+                <li class="nav-item" data-page="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </li>
+            </ul>
+            <div class="sync-status">
+                <div class="status-indicator" id="syncIndicator"></div>
+                <span id="syncStatusText">Ready</span>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <section class="page active" id="dashboard">
+                <header class="page-header">
+                    <h1>Dashboard</h1>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="syncAllBtn">
+                            <i class="fas fa-sync"></i> Sync All Now
+                        </button>
+                    </div>
+                </header>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fab fa-tumblr"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalBlogs">0</span>
+                            <span class="stat-label">Connected Blogs</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fab fa-discord"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalWebhooks">0</span>
+                            <span class="stat-label">Discord Channels</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-paper-plane"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalSynced">0</span>
+                            <span class="stat-label">Posts Synced</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-clock"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="lastSync">Never</span>
+                            <span class="stat-label">Last Sync</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>Recent Activity</h3>
+                        <div class="activity-list" id="activityList">
+                            <p class="empty-state">No recent activity</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Quick Actions</h3>
+                        <div class="quick-actions">
+                            <button class="btn btn-secondary" id="addConnectionBtn">
+                                <i class="fas fa-plus"></i> Add Connection
+                            </button>
+                            <button class="btn btn-secondary" id="syncHistoryBtn">
+                                <i class="fas fa-history"></i> Sync Past 30 Days
+                            </button>
+                            <button class="btn btn-secondary" id="exportConfigBtn">
+                                <i class="fas fa-download"></i> Export Config
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Connections Page -->
+            <section class="page" id="connections">
+                <header class="page-header">
+                    <h1>Connections</h1>
+                    <button class="btn btn-primary" id="newConnectionBtn">
+                        <i class="fas fa-plus"></i> New Connection
+                    </button>
+                </header>
+
+                <div class="connections-list" id="connectionsList">
+                    <p class="empty-state">No connections configured. Add your first connection!</p>
+                </div>
+            </section>
+
+            <!-- History Page -->
+            <section class="page" id="history">
+                <header class="page-header">
+                    <h1>History & Backfill</h1>
+                    <div class="header-actions">
+                        <select id="historyBlogFilter" class="form-select">
+                            <option value="">All Blogs</option>
+                        </select>
+                        <input type="number" id="historyDays" class="form-input" value="30" min="1" max="90" style="width: 80px;">
+                        <span>days</span>
+                        <button class="btn btn-primary" id="fetchHistoryBtn">
+                            <i class="fas fa-search"></i> Fetch Posts
+                        </button>
+                    </div>
+                </header>
+
+                <div class="history-controls">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="selectAllHistory">
+                        Select All
+                    </label>
+                    <button class="btn btn-secondary" id="uploadSelectedBtn" disabled>
+                        <i class="fas fa-upload"></i> Upload Selected to Discord
+                    </button>
+                </div>
+
+                <div class="history-list" id="historyList">
+                    <p class="empty-state">Select a blog and fetch posts to view history</p>
+                </div>
+            </section>
+
+            <!-- Settings Page -->
+            <section class="page" id="settings">
+                <header class="page-header">
+                    <h1>Settings</h1>
+                </header>
+
+                <div class="settings-grid">
+                    <div class="card">
+                        <h3><i class="fab fa-tumblr"></i> Tumblr API Configuration</h3>
+                        <p class="card-description">Configure your Tumblr API credentials. Get your API key from <a href="https://www.tumblr.com/oauth/apps" target="_blank">Tumblr Apps</a>.</p>
+                        <div class="form-group">
+                            <label>API Key (Consumer Key)</label>
+                            <input type="text" id="tumblrApiKey" class="form-input" placeholder="Enter your Tumblr API key">
+                        </div>
+                        <button class="btn btn-primary" id="saveTumblrConfig">Save Tumblr Config</button>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-clock"></i> Auto-Sync Settings</h3>
+                        <p class="card-description">Configure automatic syncing when the app is open.</p>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="autoSyncEnabled">
+                                Enable Auto-Sync
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Sync Interval (minutes)</label>
+                            <input type="number" id="syncInterval" class="form-input" value="15" min="5" max="60">
+                        </div>
+                        <button class="btn btn-primary" id="saveAutoSyncConfig">Save Auto-Sync Config</button>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-database"></i> Data Management</h3>
+                        <p class="card-description">Export or import your configuration and sync history.</p>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" id="exportAllData">
+                                <i class="fas fa-download"></i> Export All Data
+                            </button>
+                            <button class="btn btn-secondary" id="importData">
+                                <i class="fas fa-upload"></i> Import Data
+                            </button>
+                            <input type="file" id="importFileInput" accept=".json" style="display: none;">
+                        </div>
+                        <hr>
+                        <button class="btn btn-danger" id="clearAllData">
+                            <i class="fas fa-trash"></i> Clear All Data
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-bell"></i> Notification Settings</h3>
+                        <p class="card-description">Configure how you're notified about sync events.</p>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="browserNotifications">
+                                Browser Notifications
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="soundNotifications" checked>
+                                Sound Notifications
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" id="saveNotificationConfig">Save Notification Config</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Connection Modal -->
+    <div class="modal" id="connectionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New Connection</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="connectionForm">
+                    <input type="hidden" id="connectionId">
+                    
+                    <div class="form-group">
+                        <label>Tumblr Blog URL or Username</label>
+                        <input type="text" id="tumblrBlog" class="form-input" placeholder="e.g., xxpeachesncreamxx or https://www.tumblr.com/xxpeachesncreamxx" required>
+                        <small>Enter the blog username or full URL</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Display Name (Optional)</label>
+                        <input type="text" id="connectionName" class="form-input" placeholder="e.g., Peaches & Cream">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Discord Webhook URL</label>
+                        <input type="url" id="discordWebhook" class="form-input" placeholder="https://discord.com/api/webhooks/..." required>
+                        <small>Create a webhook in your Discord channel settings</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Post Types to Sync</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="photo" checked> Photos
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="video" checked> Videos
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="text" checked> Text
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="quote"> Quotes
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="link"> Links
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="postTypes" value="audio"> Audio
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="connectionEnabled" checked>
+                            Enable this connection
+                        </label>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelConnection">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Connection</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <p id="loadingText">Loading...</p>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/tumblr-api.js"></script>
+    <script src="js/discord-api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

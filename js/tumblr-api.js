@@ -374,20 +374,31 @@ class TumblrAPI {
         const images = this.getPostImages(post);
         const video = this.getPostVideo(post);
         
-        // Debug: log posts with no media detected
-        if (images.length === 0 && !video && (post.reblogged_from_name || post.trail?.length > 0)) {
-            console.log('Reblog with no media detected:', {
+        // Debug: log ALL reblog posts to see their structure
+        if (post.reblogged_from_name || post.trail?.length > 0) {
+            console.log('Reblog post structure:', {
                 id: post.id,
                 type: post.type,
+                detectedType: detectedType,
+                imagesFound: images.length,
                 reblogged_from: post.reblogged_from_name,
                 has_content: !!post.content,
-                content_length: post.content?.length,
+                content_types: post.content?.map(c => c.type) || [],
                 has_trail: !!post.trail,
                 trail_length: post.trail?.length,
+                trail_content_types: post.trail?.map(t => t.content?.map(c => c.type) || []) || [],
                 has_reblog: !!post.reblog,
+                reblog_has_comment: !!post.reblog?.comment,
+                reblog_has_tree: !!post.reblog?.tree_html,
                 has_body: !!post.body,
+                body_has_img: post.body ? /<img/i.test(post.body) : false,
                 post_keys: Object.keys(post)
             });
+            
+            // If reblog has tree_html, log a snippet
+            if (post.reblog?.tree_html) {
+                console.log('Reblog tree_html snippet:', post.reblog.tree_html.substring(0, 500));
+            }
         }
         
         return {

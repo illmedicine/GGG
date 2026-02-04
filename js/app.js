@@ -698,7 +698,10 @@ class App {
         container.innerHTML = this.historyPosts.map(post => {
             const formatted = tumblrAPI.formatPostForDisplay(post);
             const isSelected = this.selectedHistoryPosts.has(post.id);
-            const typeIcon = CONFIG.POST_TYPE_ICONS[post.type] || '📌';
+            const typeIcon = CONFIG.POST_TYPE_ICONS[formatted.type] || '📌';
+            
+            // Debug logging for media detection
+            console.log(`Formatted post: ${formatted.type} (original: ${formatted.originalType}) - ${formatted.images.length} images, video: ${formatted.video ? 'yes' : 'no'}`);
             
             return `
                 <div class="history-item ${isSelected ? 'selected' : ''}" data-id="${post.id}">
@@ -715,6 +718,7 @@ class App {
                             <span><i class="fab fa-tumblr"></i> ${post.blog_name}</span>
                             <span><i class="fas fa-clock"></i> ${formatted.date}</span>
                             <span><i class="fas fa-heart"></i> ${formatted.noteCount} notes</span>
+                            ${formatted.type !== formatted.originalType ? `<span class="badge info">${formatted.type}</span>` : ''}
                             ${post._synced ? '<span class="badge enabled">Already synced</span>' : ''}
                         </div>
                     </div>

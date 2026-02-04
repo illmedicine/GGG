@@ -91,16 +91,8 @@ class TumblrAPI {
             });
         }
         
-        // Define available proxies
+        // Define available proxies (ordered by reliability - codetabs first as it's most reliable)
         const availableProxies = [
-            {
-                name: 'allorigins-get',
-                build: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-                parse: (text) => {
-                    const wrapper = JSON.parse(text);
-                    return JSON.parse(wrapper.contents);
-                }
-            },
             {
                 name: 'codetabs',
                 build: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
@@ -110,6 +102,14 @@ class TumblrAPI {
                 name: 'corsproxy-org',
                 build: (url) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
                 parse: (text) => JSON.parse(text)
+            },
+            {
+                name: 'allorigins-get',
+                build: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                parse: (text) => {
+                    const wrapper = JSON.parse(text);
+                    return JSON.parse(wrapper.contents);
+                }
             }
         ];
         
@@ -206,8 +206,8 @@ class TumblrAPI {
             limit: Math.min(options.limit || CONFIG.MAX_POSTS_PER_REQUEST, 20),
             offset: options.offset || 0,
             reblog_info: true,
-            notes_info: true,
-            npf: true  // Request NPF format for better content extraction
+            notes_info: true
+            // Note: npf=true changes post format significantly, using legacy format for compatibility
         };
 
         if (options.type) {

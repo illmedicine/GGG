@@ -743,7 +743,6 @@ class App {
                 </div>
             `;
         }).join('');
-        }).join('');
 
         // Add checkbox listeners
         container.querySelectorAll('input[type="checkbox"]').forEach(cb => {

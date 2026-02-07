@@ -286,52 +286,52 @@ class DiscordAPI {
             return await this.sendPost(webhookUrl, post, blogInfo, null, hideUserInfo);
         }
 
-        // Create embed without the video URL in description
+        // Create embed and strip any existing video marker from description
         const embed = this.createEmbed(post, blogInfo, hideUserInfo);
-        // Remove the video URL from description since we'll post it separately
         if (embed.description) {
             embed.description = embed.description.replace(/\n\n🎬.*$/, '');
         }
 
-        // Send embed first
+        // Determine best URL to put in the embed to trigger Discord's video embed
+        const videoUrl = formatted.video || '';
+        const isTumblrVideo = /tumblr\.com/i.test(videoUrl);
+        const isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(videoUrl);
+        const isKnownProvider = /youtube\.com|youtu\.be|vimeo\.com|streamable\.com/i.test(videoUrl);
+
+        // Prefer embedding the direct media/provider URL in the embed itself so Discord shows a playable video
+        if (isDirectMedia || isKnownProvider || (!isTumblrVideo && videoUrl)) {
+            // Set embed.url to the media/provider link so Discord will try to show a playable embed
+            embed.url = videoUrl;
+        }
+
+        // Send embed (embed may now contain video preview if provider/direct URL is supported)
         const embedMessage = {
             username: 'Media Bot',
             embeds: [embed]
         };
         await this.queueMessage(webhookUrl, embedMessage);
 
-        // Then send video content
+        // If embed didn't contain a direct playable URL, fallback to posting direct content message for non-Tumblr videos
+        // or direct Tumblr media. This preserves privacy for non-direct Tumblr players.
         await this.delay(CONFIG.DISCORD_RATE_LIMIT_MS);
-        const isTumblrVideo = /tumblr\.com/i.test(formatted.video);
 
-        // Ensure a numeric media ID exists for this post
-        let mediaId = null;
+        // Ensure a numeric media ID exists for this post (for completeness)
         if (post._connectionId && post.id) {
-            mediaId = Storage.getMediaPostId(post._connectionId, post.id?.toString()) || Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
+            Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
         }
 
-        // Check if the video URL appears to be a direct media file (mp4/webm/mov)
-        const isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(formatted.video || '');
-
-        if (!isTumblrVideo) {
-            // Non-Tumblr: post the video URL so Discord can auto-embed
-            const videoMessage = {
-                username: 'Media Bot',
-                content: formatted.video
-            };
-            await this.queueMessage(webhookUrl, videoMessage);
-        } else if (isDirectMedia) {
-            // Tumblr-hosted direct media (e.g., mp4) — we can safely post the direct media URL so Discord will embed the playable video,
-            // while still hiding the Tumblr post link in the embed itself.
-            const videoMessage = {
-                username: 'Media Bot',
-                content: formatted.video
-            };
-            await this.queueMessage(webhookUrl, videoMessage);
-        } else {
-            // Tumblr video but not a direct media file (iframe/player) — do not post the raw URL to avoid revealing post details
-            // The embed already indicates a hidden video and includes the Media ID field for reference.
-            console.log('Tumblr video is not direct media; suppressing raw URL to preserve privacy.');
+        if (!embed.url) {
+            // No playable embed in embed.url — try posting the video URL as content when it's safe to do so
+            if (!isTumblrVideo || isDirectMedia) {
+                const videoMessage = {
+                    username: 'Media Bot',
+                    content: videoUrl
+                };
+                await this.queueMessage(webhookUrl, videoMessage);
+            } else {
+                // No content posted for Tumblr iframe/player-only videos to preserve privacy
+                console.log('Tumblr video player-only; not posting raw URL to keep it hidden.');
+            }
         }
 
         return true;

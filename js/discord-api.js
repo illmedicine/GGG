@@ -340,27 +340,14 @@ class DiscordAPI {
             Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
         }
 
-        if (!embed.url) {
-            // No playable embed in embed.url — decide whether to post the video URL as content.
-            const postUrl = post.post_url || formatted.url || '';
-            const isPostUrl = postUrl && videoUrl.includes(postUrl);
-            const containsBlogName = post.blog_name && videoUrl.includes(post.blog_name);
-
-            // Post the video URL if:
-            // - it's not the Tumblr post URL or obvious blog page link, AND
-            // - it's a direct media file, or from a known provider, or a Tumblr player that is not the post URL
-            const safeToPost = (!isPostUrl && !containsBlogName) && (isDirectMedia || isKnownProvider || isTumblrVideo);
-
-            if (safeToPost) {
-                const videoMessage = {
-                    username: 'Media Bot',
-                    content: videoUrl
-                };
-                await this.queueMessage(webhookUrl, videoMessage);
-            } else {
-                // No content posted to preserve privacy
-                console.log('Suppressing video URL post to avoid revealing Tumblr post link.');
-            }
+        // Always post the video URL as a separate content message when available so Discord can auto-embed the playable video.
+        // This restores pre-suppression behavior and keeps the Media ID visible in the embed.
+        if (videoUrl) {
+            const videoMessage = {
+                username: 'Media Bot',
+                content: videoUrl
+            };
+            await this.queueMessage(webhookUrl, videoMessage);
         }
 
         return true;

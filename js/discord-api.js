@@ -286,6 +286,11 @@ class DiscordAPI {
             return await this.sendPost(webhookUrl, post, blogInfo, null, hideUserInfo);
         }
 
+        // Ensure a numeric Media ID exists BEFORE creating the embed so the ID field is included
+        if (post._connectionId && post.id) {
+            Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
+        }
+
         // Create embed and strip any existing video marker from description
         const embed = this.createEmbed(post, blogInfo, hideUserInfo);
         if (embed.description) {

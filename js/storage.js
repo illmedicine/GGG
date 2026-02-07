@@ -191,7 +191,8 @@ class Storage {
             autoSyncEnabled: false,
             syncInterval: CONFIG.DEFAULT_SYNC_INTERVAL,
             browserNotifications: false,
-            soundNotifications: true
+            soundNotifications: true,
+            autoPublishMediaMap: false
         };
         return data ? { ...defaults, ...JSON.parse(data) } : defaults;
     }

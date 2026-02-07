@@ -552,6 +552,15 @@ class App {
             this.showToast(`Synced ${successCount} posts from ${connection.name}`, 'success');
             this.updateDashboard();
             this.renderConnections();
+
+            // Auto-publish media map if enabled and we synced posts
+            if (successCount > 0) {
+                try {
+                    await this._maybeAutoPublish();
+                } catch (err) {
+                    console.warn('Auto-publish failed:', err.message);
+                }
+            }
         } catch (error) {
             console.error('Sync error:', error);
             Storage.addActivity({
@@ -635,6 +644,15 @@ class App {
             text: `Synced ${totalSynced} posts from ${connections.length} connections`,
             icon: errors > 0 ? 'warning' : 'success'
         });
+
+        // Auto-publish media map if enabled and we synced posts
+        if (totalSynced > 0) {
+            try {
+                await this._maybeAutoPublish();
+            } catch (err) {
+                console.warn('Auto-publish failed:', err.message);
+            }
+        }
 
         this.hideLoading();
         this.setSyncStatus('ready');
@@ -974,6 +992,16 @@ class App {
             testGistBtn.addEventListener('click', () => this.testGist());
         }
 
+        // Auto-publish on sync checkbox
+        const autoPublishCb = document.getElementById('autoPublishOnSync');
+        if (autoPublishCb) {
+            autoPublishCb.addEventListener('change', (e) => {
+                const enabled = !!e.target.checked;
+                Storage.updateSetting('autoPublishMediaMap', enabled);
+                this.showToast(`Auto-publish on sync ${enabled ? 'enabled' : 'disabled'}`, 'success');
+            });
+        }
+
         // Auto-sync config
         document.getElementById('saveAutoSyncConfig').addEventListener('click', () => {
             const settings = Storage.getSettings();
@@ -1290,6 +1318,46 @@ class App {
         } catch (err) {
             resultDiv.textContent = `Error: ${err.message}`;
             this.showToast('Failed to fetch gist: ' + err.message, 'error');
+        }
+    }
+
+    /**
+     * Helper to publish maps automatically when enabled
+     */
+    async _maybeAutoPublish() {
+        const settings = Storage.getSettings();
+        if (!settings.autoPublishMediaMap) return;
+
+        // Try worker publish if configured
+        const workerUrl = localStorage.getItem('tumblr2discord_media_worker_url') || '';
+        const workerKey = localStorage.getItem('tumblr2discord_media_worker_key') || '';
+        const githubPat = localStorage.getItem('tumblr2discord_github_pat') || '';
+        let published = false;
+
+        this.showToast('Auto-publishing media map...', 'info');
+
+        if (workerUrl) {
+            try {
+                await this.publishMediaMap();
+                published = true;
+            } catch (e) {
+                console.warn('Auto-publish to worker failed:', e.message);
+            }
+        }
+
+        if (githubPat) {
+            try {
+                await this.publishGistMediaMap();
+                published = true;
+            } catch (e) {
+                console.warn('Auto-publish to gist failed:', e.message);
+            }
+        }
+
+        if (published) {
+            this.showToast('Auto-publish completed', 'success');
+        } else {
+            this.showToast('Auto-publish: no publishing target configured or all publishes failed', 'warning');
         }
     }
 

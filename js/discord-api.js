@@ -293,10 +293,30 @@ class DiscordAPI {
         }
 
         // Determine best URL to put in the embed to trigger Discord's video embed
-        const videoUrl = formatted.video || '';
-        const isTumblrVideo = /tumblr\.com/i.test(videoUrl);
-        const isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(videoUrl);
-        const isKnownProvider = /youtube\.com|youtu\.be|vimeo\.com|streamable\.com/i.test(videoUrl);
+        let videoUrl = formatted.video || '';
+        let isTumblrVideo = /tumblr\.com/i.test(videoUrl);
+        let isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(videoUrl);
+        let isKnownProvider = /youtube\.com|youtu\.be|vimeo\.com|streamable\.com/i.test(videoUrl);
+
+        // If we don't have a direct media URL or known provider, try probing the player URL via CORS proxies to extract direct media
+        if (videoUrl && !isDirectMedia && (isTumblrVideo || !isKnownProvider)) {
+            try {
+                const fetched = await tumblrAPI.fetchUrlViaCors(videoUrl, 8000);
+                if (fetched) {
+                    const probed = tumblrAPI.extractVideoFromHtml(fetched);
+                    if (probed && probed !== videoUrl) {
+                        // Use probed URL if it looks better
+                        videoUrl = probed;
+                        isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(videoUrl);
+                        isKnownProvider = /youtube\.com|youtu\.be|vimeo\.com|streamable\.com/i.test(videoUrl);
+                        isTumblrVideo = /tumblr\.com/i.test(videoUrl);
+                        console.log('Probed and found direct media:', videoUrl);
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to probe player URL for direct media:', err.message);
+            }
+        }
 
         // Prefer embedding the direct media/provider URL in the embed itself so Discord shows a playable video
         if (isDirectMedia || isKnownProvider || (!isTumblrVideo && videoUrl)) {

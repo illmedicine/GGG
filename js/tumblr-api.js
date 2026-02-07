@@ -271,6 +271,96 @@ class TumblrAPI {
     }
 
     /**
+     * Fetch an arbitrary URL via the configured CORS proxies (tries custom proxy, known public proxies, and CONFIG.CORS_PROXIES)
+     */
+    async fetchUrlViaCors(url, timeoutMs = 8000) {
+        if (!url) throw new Error('No URL provided');
+        const customProxy = localStorage.getItem('tumblr2discord_cors_proxy');
+        let corsProxies = [];
+
+        if (customProxy) {
+            corsProxies.push({
+                name: 'custom',
+                build: (u) => `${customProxy}?url=${encodeURIComponent(u)}`,
+                parse: (text) => text
+            });
+        }
+
+        const availableProxies = [
+            {
+                name: 'codetabs',
+                build: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+                parse: (text) => text
+            },
+            {
+                name: 'corsproxy-org',
+                build: (u) => `https://corsproxy.org/?${encodeURIComponent(u)}`,
+                parse: (text) => text
+            },
+            {
+                name: 'allorigins-get',
+                build: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+                parse: (text) => {
+                    const wrapper = JSON.parse(text);
+                    return wrapper.contents;
+                }
+            }
+        ];
+
+        // Put last working proxy first if known
+        const lastWorkingProxy = localStorage.getItem('tumblr2discord_last_proxy');
+        if (lastWorkingProxy) {
+            const lastIndex = availableProxies.findIndex(p => p.name === lastWorkingProxy);
+            if (lastIndex > 0) {
+                const [lastProxy] = availableProxies.splice(lastIndex, 1);
+                availableProxies.unshift(lastProxy);
+            }
+        }
+
+        corsProxies.push(...availableProxies);
+
+        // Add CONFIG.CORS_PROXIES
+        if (Array.isArray(CONFIG.CORS_PROXIES) && CONFIG.CORS_PROXIES.length > 0) {
+            CONFIG.CORS_PROXIES.forEach((p, idx) => {
+                corsProxies.push({
+                    name: `config_proxy_${idx + 1}`,
+                    build: (u) => `${p}${encodeURIComponent(u)}`,
+                    parse: (text) => text
+                });
+            });
+        }
+
+        let lastError = null;
+        for (let i = 0; i < corsProxies.length; i++) {
+            const proxy = corsProxies[i];
+            const proxyUrl = proxy.build(url);
+            console.log(`Trying fetch via CORS proxy ${i + 1} (${proxy.name}) -> ${proxyUrl}`);
+            try {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeoutMs);
+                const resp = await fetch(proxyUrl, { method: 'GET', signal: controller.signal, headers: { 'Accept': 'text/html' } });
+                clearTimeout(id);
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    throw new Error(`HTTP ${resp.status}: ${txt}`);
+                }
+                const text = await resp.text();
+                // parse if needed
+                const parsed = proxy.parse ? proxy.parse(text) : text;
+                // Remember working proxy
+                localStorage.setItem('tumblr2discord_last_proxy', proxy.name);
+                return parsed;
+            } catch (err) {
+                lastError = err;
+                console.warn(`Proxy ${proxy.name} failed:`, err.message);
+                // continue
+            }
+        }
+
+        throw new Error('All proxies failed: ' + (lastError?.message || 'unknown'));
+    }
+
+    /**
      * Get blog info
      */
     async getBlogInfo(blogName) {
@@ -890,9 +980,18 @@ class TumblrAPI {
         match = videoSrcRegex.exec(html);
         if (match) return match[1];
         
-        // Match common embed src attributes
+        // Match common embed src attributes (iframes etc.)
         const iframeRegex = /<iframe[^>]+src=["']([^"']+)["']/gi;
         match = iframeRegex.exec(html);
+        if (match) return match[1];
+
+        // Check for meta tags that often point to embeddable/video content
+        const metaOg = /<meta\s+property=["']og:video(?::secure_url|:url)?["']\s+content=["']([^"']+)["']/i;
+        match = html.match(metaOg);
+        if (match) return match[1];
+
+        const metaTwitter = /<meta\s+name=["']twitter:player["']\s+content=["']([^"']+)["']/i;
+        match = html.match(metaTwitter);
         if (match) return match[1];
 
         // Last resort: search for any URL that looks like a media file inside the HTML

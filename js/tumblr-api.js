@@ -808,8 +808,31 @@ class TumblrAPI {
             , null);
             
             if (bestPlayer && bestPlayer.embed_code) {
+                // Try to extract direct media URLs from the embed code
+                const videoFromEmbed = this.extractVideoFromHtml(bestPlayer.embed_code);
+                if (videoFromEmbed) return videoFromEmbed;
+
+                // Fallback: look for src= in embed (may be player URL, which is not direct media)
                 const srcMatch = bestPlayer.embed_code.match(/src=["']([^"']+)["']/i);
-                if (srcMatch) return srcMatch[1];
+                if (srcMatch) {
+                    // If src contains a query param that points to a media file, try to extract it
+                    try {
+                        const srcUrl = new URL(srcMatch[1], 'https://tumblr.com');
+                        // Check common query params for direct media links
+                        const candidates = ['video_src', 'video', 'src', 'file'];
+                        for (const p of candidates) {
+                            const val = srcUrl.searchParams.get(p);
+                            if (val && /\.(mp4|webm|m4v|mov)/i.test(val)) {
+                                return decodeURIComponent(val);
+                            }
+                        }
+                    } catch (e) {
+                        // ignore malformed URLs
+                    }
+
+                    // Otherwise return the src as last resort (may be a player URL)
+                    return srcMatch[1];
+                }
             }
         }
 
@@ -857,7 +880,7 @@ class TumblrAPI {
     extractVideoFromHtml(html) {
         if (!html) return null;
         
-        // Match video source tags
+        // Try to find direct source tags first
         const videoRegex = /<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["']/gi;
         let match = videoRegex.exec(html);
         if (match) return match[1];
@@ -867,11 +890,16 @@ class TumblrAPI {
         match = videoSrcRegex.exec(html);
         if (match) return match[1];
         
-        // Match iframe embeds (YouTube, Vimeo, etc.)
+        // Match common embed src attributes
         const iframeRegex = /<iframe[^>]+src=["']([^"']+)["']/gi;
         match = iframeRegex.exec(html);
         if (match) return match[1];
-        
+
+        // Last resort: search for any URL that looks like a media file inside the HTML
+        const urlRegex = /(https?:\/\/[^"'\s>]+\.(?:mp4|webm|m4v|mov)(?:\?[^"'\s>]*)?)/gi;
+        match = urlRegex.exec(html);
+        if (match) return match[1];
+
         return null;
     }
 

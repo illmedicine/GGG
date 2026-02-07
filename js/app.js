@@ -745,6 +745,11 @@ class App {
             }
         } catch (error) {
             console.error('Fetch history error:', error);
+            Storage.addActivity({
+                type: 'fetch_history_error',
+                text: `Error fetching history for selected blogs: ${error.message}`,
+                icon: 'error'
+            });
             this.showToast(`Error fetching history: ${error.message}`, 'error');
         } finally {
             this.hideLoading();
@@ -951,6 +956,12 @@ class App {
             this.showToast('Tumblr config saved', 'success');
         });
 
+        // Test CORS proxy button
+        const testCorsBtn = document.getElementById('testCorsProxyBtn');
+        if (testCorsBtn) {
+            testCorsBtn.addEventListener('click', () => this.testCorsProxy());
+        }
+
         // Auto-sync config
         document.getElementById('saveAutoSyncConfig').addEventListener('click', () => {
             const settings = Storage.getSettings();
@@ -977,6 +988,12 @@ class App {
 
         // Export data
         document.getElementById('exportAllData').addEventListener('click', () => this.exportData());
+
+        // Export media ID map
+        const exportMediaBtn = document.getElementById('exportMediaIdMap');
+        if (exportMediaBtn) {
+            exportMediaBtn.addEventListener('click', () => this.exportMediaIdMap());
+        }
 
         // Import data
         document.getElementById('importData').addEventListener('click', () => {
@@ -1057,6 +1074,24 @@ class App {
         
         URL.revokeObjectURL(url);
         this.showToast('Configuration exported', 'success');
+    }
+
+    /**
+     * Export the media ID map (inverted: mediaId -> tumblrPostId) for use by external bots
+     */
+    exportMediaIdMap() {
+        const data = Storage.exportMediaIdMap();
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tumblr2discord-media-map-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+        this.showToast('Media ID map exported', 'success');
     }
 
     /**

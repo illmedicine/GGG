@@ -145,16 +145,21 @@ class DiscordAPI {
                 text: `${uniquePostId ? `ID: ${uniquePostId} • ` : ''}${formatted.noteCount} notes • ${formatted.type}`,
             }
         };
-        // Only add URL if not hiding user info (URL contains username)
-        if (!hideUserInfo) {
+        // Only add URL if not hiding user info and it is NOT a Tumblr post URL
+        const isTumblrPost = /tumblr\.com/i.test(formatted.url);
+        if (!hideUserInfo && !isTumblrPost) {
             embed.url = formatted.url;
         }
-        // Add author info only if not hiding
+
+        // Add author info only if not hiding and author URL is not Tumblr (to avoid revealing Tumblr links)
         if (!hideUserInfo && (blogInfo || post.blog_name)) {
+            const authorUrl = `https://${post.blog_name}.tumblr.com`;
+            const authorIcon = blogInfo?.avatar?.[0]?.url || `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`;
             embed.author = {
                 name: blogInfo?.title || post.blog_name,
-                url: `https://${post.blog_name}.tumblr.com`,
-                icon_url: blogInfo?.avatar?.[0]?.url || `https://api.tumblr.com/v2/blog/${post.blog_name}.tumblr.com/avatar/64`
+                // Only set author URL if it is not a Tumblr link
+                url: /tumblr\.com/i.test(authorUrl) ? undefined : authorUrl,
+                icon_url: /tumblr\.com/i.test(authorIcon) ? undefined : authorIcon
             };
         }
         // Add description (sanitized if hiding user info)
@@ -174,8 +179,16 @@ class DiscordAPI {
             if (!embed.description) {
                 embed.description = '';
             }
-            // Add video URL directly - Discord will try to embed it
-            embed.description += `\n\n🎬 ${formatted.video}`;
+
+            // Detect Tumblr-hosted videos and always suppress the raw Tumblr URL
+            const isTumblrVideo = /tumblr\.com/i.test(formatted.video);
+            if (!isTumblrVideo) {
+                // For non-Tumblr videos (YouTube, Vimeo, etc.), include the URL so Discord can embed it
+                embed.description += `\n\n🎬 ${formatted.video}`;
+            } else {
+                // For Tumblr videos, don't include the raw URL. Indicate a video is present (link hidden).
+                embed.description += `\n\n🎬 Video (link hidden)`;
+            }
         }
         // Add tags as field (only if not hiding user info, tags can be identifying)
         if (!hideUserInfo && formatted.tags && formatted.tags.length > 0) {
@@ -186,6 +199,18 @@ class DiscordAPI {
                 inline: false
             }];
         }
+
+        // Add Media ID prominently if available
+        if (uniquePostId) {
+            embed.fields = embed.fields || [];
+            // Put Media ID first so it's easy to spot
+            embed.fields.unshift({
+                name: 'Media ID',
+                value: uniquePostId.toString(),
+                inline: true
+            });
+        }
+
         return embed;
     }
 
@@ -275,14 +300,27 @@ class DiscordAPI {
         };
         await this.queueMessage(webhookUrl, embedMessage);
 
-        // Then send video URL as plain content - Discord will auto-embed it
+        // Then send video content
         await this.delay(CONFIG.DISCORD_RATE_LIMIT_MS);
-        const videoMessage = {
-            username: 'Media Bot',
-            content: formatted.video
-        };
-        await this.queueMessage(webhookUrl, videoMessage);
+        const isTumblrVideo = /tumblr\.com/i.test(formatted.video);
 
+        // Ensure a numeric media ID exists for this post
+        let mediaId = null;
+        if (post._connectionId && post.id) {
+            mediaId = Storage.getMediaPostId(post._connectionId, post.id?.toString()) || Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
+        }
+
+        if (!isTumblrVideo) {
+            // Post the actual video URL so Discord can auto-embed
+            const videoMessage = {
+                username: 'Media Bot',
+                content: formatted.video
+            };
+            await this.queueMessage(webhookUrl, videoMessage);
+        }
+
+        // For Tumblr videos we do not send the raw URL or a separate hidden message.
+        // The Media ID is included in the main embed (see 'Media ID' field).
         return true;
     }
 

@@ -29,7 +29,8 @@ const CONFIG = {
         SETTINGS: 'tumblr2discord_settings',
         ACTIVITY_LOG: 'tumblr2discord_activity',
         STATS: 'tumblr2discord_stats',
-        MEDIA_POST_IDS: 'tumblr2discord_media_post_ids'
+        MEDIA_POST_IDS: 'tumblr2discord_media_post_ids',
+        MEDIA_ID_COUNTER: 'tumblr2discord_media_id_counter'
     },
     
     // Post type icons for Discord embeds

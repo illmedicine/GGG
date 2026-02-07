@@ -9,6 +9,27 @@
     font-family: monospace;
     font-weight: bold;
 }
+
+/* CORS proxy test results */
+.cors-results {
+    margin-top: 8px;
+}
+.cors-result {
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    background: rgba(255,255,255,0.02);
+}
+.cors-left { display:flex; flex-direction:column; }
+.cors-url { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; word-break: break-all; }
+.cors-right { display:flex; gap:8px; align-items:center; }
+.badge.success { background: var(--success); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+.badge.error { background: var(--danger); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
 .post-id {
     color: var(--discord-purple);
     font-family: monospace;

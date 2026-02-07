@@ -124,11 +124,22 @@ class TumblrAPI {
         
         corsProxies.push(...availableProxies);
 
+        // Add user-configured fallback proxies from CONFIG if present
+        if (Array.isArray(CONFIG.CORS_PROXIES) && CONFIG.CORS_PROXIES.length > 0) {
+            CONFIG.CORS_PROXIES.forEach((p, idx) => {
+                corsProxies.push({
+                    name: `config_proxy_${idx + 1}`,
+                    build: (url) => `${p}${encodeURIComponent(url)}`,
+                    parse: (text) => JSON.parse(text)
+                });
+            });
+        }
+
         // Try each CORS proxy
         for (let i = 0; i < corsProxies.length; i++) {
             const proxy = corsProxies[i];
             const proxyUrl = proxy.build(baseUrl);
-            console.log(`Trying CORS proxy ${i + 1} (${proxy.name})`);
+            console.log(`Trying CORS proxy ${i + 1} (${proxy.name}) -> ${proxyUrl}`);
             
             try {
                 const response = await fetch(proxyUrl, {
@@ -171,7 +182,92 @@ class TumblrAPI {
             }
         }
 
-        throw new Error('All CORS proxies failed. Please set up a custom CORS proxy in Settings. See README for instructions.');
+        throw new Error('All CORS proxies failed. Last error: ' + (lastError?.message || 'unknown') + '. Please set up a custom CORS proxy in Settings. See README for instructions.');
+    }
+
+    /**
+     * Test CORS proxies by attempting to fetch a lightweight JSON target.
+     * Returns array of results: { name, url, ok, status, error, timeMs }
+     */
+    async testCorsProxies(timeoutMs = 8000) {
+        const testTarget = 'https://httpbin.org/get';
+        const results = [];
+
+        // Custom proxy first (if configured)
+        const customProxy = localStorage.getItem('tumblr2discord_cors_proxy');
+        if (customProxy) {
+            const proxy = {
+                name: 'custom',
+                build: (url) => `${customProxy}?url=${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            };
+            try {
+                const start = Date.now();
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeoutMs);
+                const response = await fetch(proxy.build(testTarget), { method: 'GET', signal: controller.signal, headers: { 'Accept': 'application/json' } });
+                clearTimeout(id);
+                const text = await response.text();
+                let ok = false;
+                try { proxy.parse(text); ok = true; } catch (e) { ok = response.ok; }
+                results.push({ name: proxy.name, url: proxy.build(testTarget), ok, status: response.status, timeMs: Date.now() - start });
+            } catch (err) {
+                results.push({ name: 'custom', url: proxy.build(testTarget), ok: false, error: err.message, timeMs: null });
+            }
+        }
+
+        // Known dynamic proxies
+        const availableProxies = [
+            {
+                name: 'codetabs',
+                build: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            },
+            {
+                name: 'corsproxy-org',
+                build: (url) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
+                parse: (text) => JSON.parse(text)
+            },
+            {
+                name: 'allorigins-get',
+                build: (url) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                parse: (text) => { const wrapper = JSON.parse(text); return JSON.parse(wrapper.contents); }
+            }
+        ];
+
+        const corsProxies = [];
+        corsProxies.push(...availableProxies);
+
+        // Add configured proxy list from CONFIG (same format as used elsewhere)
+        if (Array.isArray(CONFIG.CORS_PROXIES) && CONFIG.CORS_PROXIES.length > 0) {
+            CONFIG.CORS_PROXIES.forEach((p, idx) => {
+                corsProxies.push({
+                    name: `config_proxy_${idx + 1}`,
+                    build: (url) => `${p}${encodeURIComponent(url)}`,
+                    parse: (text) => JSON.parse(text)
+                });
+            });
+        }
+
+        // Test each proxy sequentially
+        for (const proxy of corsProxies) {
+            const start = Date.now();
+            const proxyUrl = proxy.build(testTarget);
+            try {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeoutMs);
+                const response = await fetch(proxyUrl, { method: 'GET', signal: controller.signal, headers: { 'Accept': 'application/json' } });
+                clearTimeout(id);
+                const text = await response.text();
+                let ok = false;
+                try { proxy.parse(text); ok = true; } catch (e) { ok = response.ok; }
+                results.push({ name: proxy.name, url: proxyUrl, ok, status: response.status, timeMs: Date.now() - start });
+            } catch (err) {
+                results.push({ name: proxy.name, url: proxyUrl, ok: false, error: err.message, timeMs: Date.now() - start });
+            }
+        }
+
+        return results;
     }
 
     /**

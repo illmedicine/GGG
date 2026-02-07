@@ -25,11 +25,13 @@ class Storage {
         static getOrCreateMediaPostId(connectionId, tumblrPostId) {
             const map = this.getMediaPostIdMap();
             if (!map[connectionId]) map[connectionId] = {};
-            if (!map[connectionId][tumblrPostId]) {
-                map[connectionId][tumblrPostId] = this.generateId();
+            const key = tumblrPostId?.toString();
+            if (!map[connectionId][key]) {
+                // Assign a sequential numeric media ID
+                map[connectionId][key] = this._getNextMediaId();
                 this.saveMediaPostIdMap(map);
             }
-            return map[connectionId][tumblrPostId];
+            return map[connectionId][key];
         }
 
         /**
@@ -37,7 +39,7 @@ class Storage {
          */
         static getMediaPostId(connectionId, tumblrPostId) {
             const map = this.getMediaPostIdMap();
-            return map[connectionId]?.[tumblrPostId] || null;
+            return map[connectionId]?.[tumblrPostId?.toString()] || null;
         }
 
         /**
@@ -50,13 +52,26 @@ class Storage {
             for (const conn of connections) {
                 if (!map[conn.id]) map[conn.id] = {};
                 for (const tumblrPostId of conn.syncedPostIds || []) {
-                    if (!map[conn.id][tumblrPostId]) {
-                        map[conn.id][tumblrPostId] = this.generateId();
+                    const key = tumblrPostId?.toString();
+                    if (!map[conn.id][key]) {
+                        map[conn.id][key] = this._getNextMediaId();
                         changed = true;
                     }
                 }
             }
             if (changed) this.saveMediaPostIdMap(map);
+        }
+
+        /**
+         * Internal: get next sequential numeric media ID (persists counter)
+         */
+        static _getNextMediaId() {
+            const counterKey = CONFIG.STORAGE_KEYS.MEDIA_ID_COUNTER;
+            let counter = parseInt(localStorage.getItem(counterKey) || '0', 10);
+            counter = isNaN(counter) ? 0 : counter;
+            counter += 1;
+            localStorage.setItem(counterKey, counter.toString());
+            return counter;
         }
     /**
      * Get Tumblr API key
@@ -272,6 +287,44 @@ class Storage {
             activity: this.getActivityLog(),
             stats: this.getStats()
         };
+    }
+
+    /**
+     * Export the media ID mapping (per connection) as an inverted map (mediaId -> tumblrPostId)
+     * Useful for external systems that need to resolve a Media ID to a Tumblr post ID.
+     */
+    static exportMediaIdMap() {
+        const map = this.getMediaPostIdMap();
+        const inverted = {};
+        for (const connId of Object.keys(map)) {
+            inverted[connId] = {};
+            for (const tumblrId of Object.keys(map[connId])) {
+                const mediaId = map[connId][tumblrId];
+                // store as number -> string
+                inverted[connId][mediaId] = tumblrId;
+            }
+        }
+        return {
+            exportedAt: new Date().toISOString(),
+            map: inverted
+        };
+    }
+
+    /**
+     * Resolve a Tumblr post ID by Media ID for a given connection. Returns the tumblrPostId (string) or null.
+     */
+    static getTumblrPostIdByMediaId(connectionId, mediaId) {
+        if (!connectionId || mediaId == null) return null;
+        const map = this.getMediaPostIdMap();
+        const connMap = map[connectionId];
+        if (!connMap) return null;
+        // Search for the tumblrPostId which maps to this mediaId
+        for (const tumblrId of Object.keys(connMap)) {
+            if (connMap[tumblrId] === mediaId || connMap[tumblrId] === mediaId.toString()) {
+                return tumblrId;
+            }
+        }
+        return null;
     }
 
     /**

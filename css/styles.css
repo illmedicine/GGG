@@ -34,6 +34,27 @@
 /* Publish status */
 .publish-status { color: var(--text-muted); font-size: 0.9rem; }
 .publish-status .status-text { color: var(--text-secondary); }
+
+/* History floating action bar */
+.history-floater {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-radius: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+    z-index: 9999;
+}
+.history-floater .btn { padding: 8px 12px; }
+@media (max-width: 600px) {
+    .history-floater { right: 12px; left: 12px; bottom: 12px; justify-content: space-between; }
+    .history-floater .floater-checkbox { display: none; }
+}
 .post-id {
     color: var(--discord-purple);
     font-family: monospace;

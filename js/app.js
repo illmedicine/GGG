@@ -676,11 +676,28 @@ class App {
 
         document.getElementById('selectAllHistory').addEventListener('change', (e) => {
             this.toggleSelectAllHistory(e.target.checked);
+            // Mirror to floater checkbox if present
+            const floaterCb = document.getElementById('floaterSelectAll');
+            if (floaterCb) floaterCb.checked = e.target.checked;
         });
 
         document.getElementById('uploadSelectedBtn').addEventListener('click', () => {
             this.uploadSelectedHistory();
         });
+
+        // Floater controls
+        const floaterCb = document.getElementById('floaterSelectAll');
+        if (floaterCb) {
+            floaterCb.addEventListener('change', (e) => {
+                document.getElementById('selectAllHistory').checked = e.target.checked;
+                this.toggleSelectAllHistory(e.target.checked);
+            });
+        }
+
+        const floaterBtn = document.getElementById('floaterUploadBtn');
+        if (floaterBtn) {
+            floaterBtn.addEventListener('click', () => this.uploadSelectedHistory());
+        }
     }
 
     /**
@@ -880,6 +897,33 @@ class App {
         const btn = document.getElementById('uploadSelectedBtn');
         btn.disabled = this.selectedHistoryPosts.size === 0;
         btn.innerHTML = `<i class="fas fa-upload"></i> Upload Selected (${this.selectedHistoryPosts.size})`;
+
+        // Update floater state
+        const floater = document.getElementById('historyFloater');
+        const floaterBtn = document.getElementById('floaterUploadBtn');
+        const floaterText = document.getElementById('floaterUploadText');
+        const floaterCb = document.getElementById('floaterSelectAll');
+
+        if (floater) {
+            // Show floater only when there are posts
+            if (this.historyPosts.length > 0) {
+                floater.style.display = 'flex';
+            } else {
+                floater.style.display = 'none';
+            }
+        }
+
+        if (floaterBtn) {
+            floaterBtn.disabled = this.selectedHistoryPosts.size === 0;
+            if (floaterText) floaterText.textContent = `Upload Selected (${this.selectedHistoryPosts.size})`;
+        }
+
+        if (floaterCb) {
+            // If all non-synced posts are selected, check it; otherwise unset
+            const unsynced = this.historyPosts.filter(p => !p._synced).map(p => p.id);
+            const allSelected = unsynced.length > 0 && unsynced.every(id => this.selectedHistoryPosts.has(id));
+            floaterCb.checked = allSelected;
+        }
     }
 
     /**

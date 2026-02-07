@@ -147,6 +147,17 @@
                     </button>
                 </div>
 
+                <!-- Floating action bar for history (appears when there are posts) -->
+                <div id="historyFloater" class="history-floater" style="display:none;">
+                    <label class="checkbox-label floater-checkbox">
+                        <input type="checkbox" id="floaterSelectAll">
+                        Select All
+                    </label>
+                    <button class="btn btn-primary" id="floaterUploadBtn" disabled>
+                        <i class="fas fa-upload"></i> <span id="floaterUploadText">Upload Selected (0)</span>
+                    </button>
+                </div>
+
                 <div class="history-list" id="historyList">
                     <p class="empty-state">Select a blog and fetch posts to view history</p>
                 </div>

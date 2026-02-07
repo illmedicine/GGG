@@ -1004,6 +1004,17 @@ class App {
             this.importData(e.target.files[0]);
         });
 
+        // Publish Media Map to worker
+        const publishBtn = document.getElementById('publishMediaMapBtn');
+        if (publishBtn) {
+            publishBtn.addEventListener('click', () => this.publishMediaMap());
+        }
+
+        const testLookupBtn = document.getElementById('testMediaLookupBtn');
+        if (testLookupBtn) {
+            testLookupBtn.addEventListener('click', () => this.testMediaLookup());
+        }
+
         // Clear data
         document.getElementById('clearAllData').addEventListener('click', () => {
             if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
@@ -1023,6 +1034,8 @@ class App {
         const apiKey = Storage.getTumblrApiKey();
         const settings = Storage.getSettings();
         const corsProxy = localStorage.getItem('tumblr2discord_cors_proxy') || '';
+        const workerUrl = localStorage.getItem('tumblr2discord_media_worker_url') || '';
+        const workerKey = localStorage.getItem('tumblr2discord_media_worker_key') || '';
 
         document.getElementById('tumblrApiKey').value = apiKey;
         document.getElementById('corsProxyUrl').value = corsProxy;
@@ -1030,6 +1043,9 @@ class App {
         document.getElementById('syncInterval').value = settings.syncInterval;
         document.getElementById('browserNotifications').checked = settings.browserNotifications;
         document.getElementById('soundNotifications').checked = settings.soundNotifications;
+
+        document.getElementById('mediaWorkerUrl').value = workerUrl;
+        document.getElementById('mediaWorkerApiKey').value = workerKey;
 
         // Update tumblrAPI with key
         tumblrAPI.setApiKey(apiKey);
@@ -1074,6 +1090,79 @@ class App {
         
         URL.revokeObjectURL(url);
         this.showToast('Configuration exported', 'success');
+    }
+
+    /**
+     * Publish the Media ID map to a worker endpoint (POST /upload). Requires worker URL and API key in Settings.
+     */
+    async publishMediaMap() {
+        const workerUrl = (document.getElementById('mediaWorkerUrl')?.value || '').trim();
+        const apiKey = (document.getElementById('mediaWorkerApiKey')?.value || '').trim();
+        const resultDiv = document.getElementById('mediaWorkerResult');
+
+        if (!workerUrl) {
+            this.showToast('Please enter a Media Map Worker URL in Settings', 'error');
+            return;
+        }
+
+        // Save settings to localStorage
+        localStorage.setItem('tumblr2discord_media_worker_url', workerUrl);
+        localStorage.setItem('tumblr2discord_media_worker_key', apiKey);
+
+        resultDiv.textContent = 'Publishing media map...';
+
+        try {
+            const map = Storage.exportMediaIdMap();
+            const resp = await fetch(workerUrl.replace(/\/$/, '') + '/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': apiKey
+                },
+                body: JSON.stringify(map)
+            });
+
+            const json = await resp.json();
+            if (resp.ok) {
+                resultDiv.textContent = `Success: ${json.message || 'Map uploaded'}`;
+                this.showToast('Media map published', 'success');
+            } else {
+                resultDiv.textContent = `Error: ${json.error || resp.statusText}`;
+                this.showToast('Failed to publish media map', 'error');
+            }
+        } catch (err) {
+            resultDiv.textContent = `Error: ${err.message}`;
+            this.showToast('Failed to publish media map: ' + err.message, 'error');
+        }
+    }
+
+    /**
+     * Test worker lookup by calling GET /lookup with connectionId and mediaId from inputs
+     */
+    async testMediaLookup() {
+        const workerUrl = (document.getElementById('mediaWorkerUrl')?.value || '').trim();
+        const conn = (document.getElementById('testLookupConnection')?.value || '').trim();
+        const mediaId = (document.getElementById('testLookupMediaId')?.value || '').trim();
+        const resultDiv = document.getElementById('mediaWorkerResult');
+
+        if (!workerUrl) { this.showToast('Enter worker URL', 'error'); return; }
+        if (!conn || !mediaId) { this.showToast('Enter connection ID and media ID', 'error'); return; }
+
+        resultDiv.textContent = 'Querying worker...';
+        try {
+            const resp = await fetch(workerUrl.replace(/\/$/, '') + `/lookup?connectionId=${encodeURIComponent(conn)}&mediaId=${encodeURIComponent(mediaId)}`);
+            const json = await resp.json();
+            if (resp.ok) {
+                resultDiv.innerHTML = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+                this.showToast('Lookup successful', 'success');
+            } else {
+                resultDiv.textContent = `Error: ${json.error || resp.statusText}`;
+                this.showToast('Lookup failed', 'error');
+            }
+        } catch (err) {
+            resultDiv.textContent = `Error: ${err.message}`;
+            this.showToast('Lookup failed: ' + err.message, 'error');
+        }
     }
 
     /**

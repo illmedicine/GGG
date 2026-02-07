@@ -205,6 +205,24 @@
                             </button>
                             <input type="file" id="importFileInput" accept=".json" style="display: none;">
                         </div>
+
+                        <hr>
+                        <div class="form-group">
+                            <label>Media Map Worker URL</label>
+                            <input type="url" id="mediaWorkerUrl" class="form-input" placeholder="https://your-worker.example.workers.dev">
+                        </div>
+                        <div class="form-group">
+                            <label>Worker API Key (secret)</label>
+                            <input type="text" id="mediaWorkerApiKey" class="form-input" placeholder="X-API-Key for worker uploads">
+                        </div>
+                        <div class="form-group">
+                            <button class="btn btn-secondary" id="publishMediaMapBtn"><i class="fas fa-cloud-upload-alt"></i> Publish Media ID Map</button>
+                            <button class="btn btn-secondary" id="testMediaLookupBtn"><i class="fas fa-bolt"></i> Test Lookup</button>
+                            <input type="text" id="testLookupConnection" class="form-input" placeholder="Connection ID" style="width:140px; display:inline-block; margin-left:8px;">
+                            <input type="number" id="testLookupMediaId" class="form-input" placeholder="Media ID" style="width:110px; display:inline-block; margin-left:8px;">
+                            <div id="mediaWorkerResult" style="margin-top:8px"></div>
+                        </div>
+
                         <hr>
                         <button class="btn btn-danger" id="clearAllData">
                             <i class="fas fa-trash"></i> Clear All Data

@@ -224,6 +224,19 @@
                         </div>
 
                         <hr>
+                        <div class="form-group">
+                            <label>Publish to GitHub Gist (secret gist)</label>
+                            <input type="password" id="githubPat" class="form-input" placeholder="GitHub Personal Access Token (repo:gists)" style="margin-bottom:8px;">
+                            <input type="text" id="existingGistId" class="form-input" placeholder="Existing Gist ID (optional)" style="margin-bottom:8px;">
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <button class="btn btn-secondary" id="publishGistBtn"><i class="fas fa-save"></i> Publish to Gist</button>
+                                <button class="btn btn-secondary" id="testGistBtn"><i class="fas fa-search"></i> Test Gist</button>
+                                <input type="text" id="testGistId" class="form-input" placeholder="Gist ID to test" style="width:200px; margin-left:8px;">
+                            </div>
+                            <div id="gistResult" style="margin-top:8px"></div>
+                        </div>
+
+                        <hr>
                         <button class="btn btn-danger" id="clearAllData">
                             <i class="fas fa-trash"></i> Clear All Data
                         </button>

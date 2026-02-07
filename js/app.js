@@ -962,6 +962,18 @@ class App {
             testCorsBtn.addEventListener('click', () => this.testCorsProxy());
         }
 
+        // Publish to Gist button
+        const publishGistBtn = document.getElementById('publishGistBtn');
+        if (publishGistBtn) {
+            publishGistBtn.addEventListener('click', () => this.publishGistMediaMap());
+        }
+
+        // Test Gist button
+        const testGistBtn = document.getElementById('testGistBtn');
+        if (testGistBtn) {
+            testGistBtn.addEventListener('click', () => this.testGist());
+        }
+
         // Auto-sync config
         document.getElementById('saveAutoSyncConfig').addEventListener('click', () => {
             const settings = Storage.getSettings();
@@ -1046,6 +1058,8 @@ class App {
 
         document.getElementById('mediaWorkerUrl').value = workerUrl;
         document.getElementById('mediaWorkerApiKey').value = workerKey;
+        document.getElementById('githubPat').value = localStorage.getItem('tumblr2discord_github_pat') || '';
+        document.getElementById('existingGistId').value = localStorage.getItem('tumblr2discord_gist_id') || '';
 
         // Update tumblrAPI with key
         tumblrAPI.setApiKey(apiKey);
@@ -1162,6 +1176,120 @@ class App {
         } catch (err) {
             resultDiv.textContent = `Error: ${err.message}`;
             this.showToast('Lookup failed: ' + err.message, 'error');
+        }
+    }
+
+    /**
+     * Publish Media ID map to GitHub Gist (secret gist). Requires PAT with gist scope.
+     */
+    async publishGistMediaMap() {
+        const pat = (document.getElementById('githubPat')?.value || '').trim();
+        const existingGist = (document.getElementById('existingGistId')?.value || '').trim();
+        const resultDiv = document.getElementById('gistResult');
+
+        if (!pat) { this.showToast('Enter GitHub Personal Access Token (Gist scope)', 'error'); return; }
+
+        resultDiv.textContent = 'Publishing to Gist...';
+
+        try {
+            const map = Storage.exportMediaIdMap();
+            const content = JSON.stringify(map, null, 2);
+            let resp, json;
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `token ${pat}`
+            };
+
+            if (existingGist) {
+                // Update existing gist
+                resp = await fetch(`https://api.github.com/gists/${existingGist}`, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify({
+                        description: 'Tumblr2Discord Media Map',
+                        files: {
+                            'media-map.json': { content }
+                        }
+                    })
+                });
+                json = await resp.json();
+            } else {
+                // Create new secret gist
+                resp = await fetch('https://api.github.com/gists', {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                        description: 'Tumblr2Discord Media Map',
+                        public: false,
+                        files: {
+                            'media-map.json': { content }
+                        }
+                    })
+                });
+                json = await resp.json();
+            }
+
+            if (resp.ok) {
+                const gistId = json.id;
+                const htmlUrl = json.html_url;
+                // Save PAT & gist ID locally (user may choose to remove PAT later)
+                localStorage.setItem('tumblr2discord_github_pat', pat);
+                localStorage.setItem('tumblr2discord_gist_id', gistId);
+                document.getElementById('existingGistId').value = gistId;
+                resultDiv.innerHTML = `Success: <a href="${htmlUrl}" target="_blank">${htmlUrl}</a>`;
+                this.showToast('Gist published', 'success');
+            } else {
+                resultDiv.textContent = `Error: ${json.message || json.error || resp.statusText}`;
+                this.showToast('Failed to publish gist', 'error');
+            }
+        } catch (err) {
+            resultDiv.textContent = `Error: ${err.message}`;
+            this.showToast('Failed to publish gist: ' + err.message, 'error');
+        }
+    }
+
+    /**
+     * Test a Gist by ID (shows media-map.json content if present)
+     */
+    async testGist() {
+        const pat = (document.getElementById('githubPat')?.value || '').trim();
+        const gistIdInput = (document.getElementById('testGistId')?.value || '').trim();
+        const gistId = gistIdInput || (document.getElementById('existingGistId')?.value || '').trim();
+        const resultDiv = document.getElementById('gistResult');
+
+        if (!gistId) { this.showToast('Enter a Gist ID to test (or set Existing Gist ID)', 'error'); return; }
+
+        resultDiv.textContent = 'Fetching gist...';
+
+        try {
+            const headers = pat ? { 'Authorization': `token ${pat}` } : {};
+            const resp = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
+            const json = await resp.json();
+            if (resp.ok) {
+                // Try to find media-map.json in files
+                const files = json.files || {};
+                if (files['media-map.json']) {
+                    const content = files['media-map.json'].content;
+                    // Pretty print
+                    try {
+                        const parsed = JSON.parse(content);
+                        resultDiv.innerHTML = `<pre>${JSON.stringify(parsed, null, 2)}</pre>`;
+                    } catch (e) {
+                        resultDiv.innerHTML = `<pre>${content.substring(0, 2000)}</pre>`;
+                    }
+                    this.showToast('Gist fetched', 'success');
+                } else {
+                    resultDiv.textContent = 'Gist found but does not contain media-map.json';
+                    this.showToast('Gist found (no media-map.json)', 'warning');
+                }
+            } else {
+                resultDiv.textContent = `Error: ${json.message || resp.statusText}`;
+                this.showToast('Failed to fetch gist', 'error');
+            }
+        } catch (err) {
+            resultDiv.textContent = `Error: ${err.message}`;
+            this.showToast('Failed to fetch gist: ' + err.message, 'error');
         }
     }
 

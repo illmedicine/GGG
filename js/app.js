@@ -1091,6 +1091,43 @@ class App {
 
         // Update tumblrAPI with key
         tumblrAPI.setApiKey(apiKey);
+
+        // Show last publish statuses
+        const settings = Storage.getSettings();
+        this._renderPublishStatus('worker', settings.lastPublishWorker);
+        this._renderPublishStatus('gist', settings.lastPublishGist);
+    }
+
+    /**
+     * Set publish status for target ('worker' or 'gist') and persist in settings
+     */
+    _setPublishStatus(target, ok, message) {
+        const status = {
+            ok: !!ok,
+            message: message || '',
+            time: Date.now()
+        };
+        if (target === 'worker') {
+            Storage.updateSetting('lastPublishWorker', status);
+        } else if (target === 'gist') {
+            Storage.updateSetting('lastPublishGist', status);
+        }
+        this._renderPublishStatus(target, status);
+    }
+
+    /**
+     * Render publish status into UI
+     */
+    _renderPublishStatus(target, status) {
+        const el = document.getElementById(target === 'worker' ? 'workerPublishStatus' : 'gistPublishStatus');
+        if (!el) return;
+        if (!status) {
+            el.querySelector('.status-text').textContent = 'N/A';
+            return;
+        }
+        const time = new Date(status.time).toLocaleString();
+        const text = `${status.ok ? 'Success' : 'Failed'} @ ${time}` + (status.message ? ` — ${status.message}` : '');
+        el.querySelector('.status-text').textContent = text;
     }
 
     /**
@@ -1168,13 +1205,18 @@ class App {
             if (resp.ok) {
                 resultDiv.textContent = `Success: ${json.message || 'Map uploaded'}`;
                 this.showToast('Media map published', 'success');
+                this._setPublishStatus('worker', true, json.message || 'Map uploaded');
             } else {
-                resultDiv.textContent = `Error: ${json.error || resp.statusText}`;
+                const msg = json.error || resp.statusText;
+                resultDiv.textContent = `Error: ${msg}`;
                 this.showToast('Failed to publish media map', 'error');
+                this._setPublishStatus('worker', false, msg);
             }
         } catch (err) {
-            resultDiv.textContent = `Error: ${err.message}`;
+            const msg = err.message;
+            resultDiv.textContent = `Error: ${msg}`;
             this.showToast('Failed to publish media map: ' + err.message, 'error');
+            this._setPublishStatus('worker', false, msg);
         }
     }
 
@@ -1267,13 +1309,18 @@ class App {
                 document.getElementById('existingGistId').value = gistId;
                 resultDiv.innerHTML = `Success: <a href="${htmlUrl}" target="_blank">${htmlUrl}</a>`;
                 this.showToast('Gist published', 'success');
+                this._setPublishStatus('gist', true, htmlUrl);
             } else {
-                resultDiv.textContent = `Error: ${json.message || json.error || resp.statusText}`;
+                const msg = json.message || json.error || resp.statusText;
+                resultDiv.textContent = `Error: ${msg}`;
                 this.showToast('Failed to publish gist', 'error');
+                this._setPublishStatus('gist', false, msg);
             }
         } catch (err) {
-            resultDiv.textContent = `Error: ${err.message}`;
+            const msg = err.message;
+            resultDiv.textContent = `Error: ${msg}`;
             this.showToast('Failed to publish gist: ' + err.message, 'error');
+            this._setPublishStatus('gist', false, msg);
         }
     }
 

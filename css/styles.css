@@ -30,6 +30,10 @@
 .cors-right { display:flex; gap:8px; align-items:center; }
 .badge.success { background: var(--success); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
 .badge.error { background: var(--danger); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+
+/* Publish status */
+.publish-status { color: var(--text-muted); font-size: 0.9rem; }
+.publish-status .status-text { color: var(--text-secondary); }
 .post-id {
     color: var(--discord-purple);
     font-family: monospace;

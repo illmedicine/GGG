@@ -221,12 +221,7 @@
                             <input type="text" id="testLookupConnection" class="form-input" placeholder="Connection ID" style="width:140px; display:inline-block; margin-left:8px;">
                             <input type="number" id="testLookupMediaId" class="form-input" placeholder="Media ID" style="width:110px; display:inline-block; margin-left:8px;">
                             <div id="mediaWorkerResult" style="margin-top:8px"></div>
-                        </div>
-
-                        <hr>
-                        <div class="form-group">
-                            <label>Publish to GitHub Gist (secret gist)</label>
-                            <input type="password" id="githubPat" class="form-input" placeholder="GitHub Personal Access Token (repo:gists)" style="margin-bottom:8px;">
+                            <div id="workerPublishStatus" class="publish-status" style="margin-top:6px; font-size:0.9rem; color:var(--text-muted);">Last publish: <span class="status-text">N/A</span></div>
                             <input type="text" id="existingGistId" class="form-input" placeholder="Existing Gist ID (optional)" style="margin-bottom:8px;">
                             <div style="display:flex;gap:8px;align-items:center;">
                                 <button class="btn btn-secondary" id="publishGistBtn"><i class="fas fa-save"></i> Publish to Gist</button>
@@ -239,6 +234,7 @@
                                 </label>
                             </div>
                             <div id="gistResult" style="margin-top:8px"></div>
+                            <div id="gistPublishStatus" class="publish-status" style="margin-top:6px; font-size:0.9rem; color:var(--text-muted);">Last publish: <span class="status-text">N/A</span></div>
                         </div>
 
                         <hr>

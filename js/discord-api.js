@@ -310,17 +310,30 @@ class DiscordAPI {
             mediaId = Storage.getMediaPostId(post._connectionId, post.id?.toString()) || Storage.getOrCreateMediaPostId(post._connectionId, post.id?.toString());
         }
 
+        // Check if the video URL appears to be a direct media file (mp4/webm/mov)
+        const isDirectMedia = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(formatted.video || '');
+
         if (!isTumblrVideo) {
-            // Post the actual video URL so Discord can auto-embed
+            // Non-Tumblr: post the video URL so Discord can auto-embed
             const videoMessage = {
                 username: 'Media Bot',
                 content: formatted.video
             };
             await this.queueMessage(webhookUrl, videoMessage);
+        } else if (isDirectMedia) {
+            // Tumblr-hosted direct media (e.g., mp4) — we can safely post the direct media URL so Discord will embed the playable video,
+            // while still hiding the Tumblr post link in the embed itself.
+            const videoMessage = {
+                username: 'Media Bot',
+                content: formatted.video
+            };
+            await this.queueMessage(webhookUrl, videoMessage);
+        } else {
+            // Tumblr video but not a direct media file (iframe/player) — do not post the raw URL to avoid revealing post details
+            // The embed already indicates a hidden video and includes the Media ID field for reference.
+            console.log('Tumblr video is not direct media; suppressing raw URL to preserve privacy.');
         }
 
-        // For Tumblr videos we do not send the raw URL or a separate hidden message.
-        // The Media ID is included in the main embed (see 'Media ID' field).
         return true;
     }
 

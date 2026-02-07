@@ -1092,8 +1092,7 @@ class App {
         // Update tumblrAPI with key
         tumblrAPI.setApiKey(apiKey);
 
-        // Show last publish statuses
-        const settings = Storage.getSettings();
+        // Show last publish statuses (use already loaded settings object)
         this._renderPublishStatus('worker', settings.lastPublishWorker);
         this._renderPublishStatus('gist', settings.lastPublishGist);
     }
